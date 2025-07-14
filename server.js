@@ -68,7 +68,7 @@ function scanReportsDirectory(dir, baseDir = dir) {
 				const modelPath = path.join(vendorPath, model);
 				
 				// Check for model image
-				const modelImagePath = path.join(modelPath, 'model.png');
+				const modelImagePath = path.join(modelPath, 'device.png');
 				const hasModelImage = checkImageFile(modelImagePath);
 				if (hasModelImage) {
 					const relativePath = path.relative(baseDir, modelImagePath).replace(/\\/g, '/');
@@ -334,7 +334,7 @@ server.listen(PORT, () => {
 		console.log('    ├── Adtran/');
 		console.log('    │   ├── logo.png             (vendor logo - optional)');
 		console.log('    │   ├── SDG-8612/');
-		console.log('    │   │   ├── model.png        (device image - optional)');
+		console.log('    │   │   ├── device.png        (device image - optional)');
 		console.log('    │   │   ├── 25.6.3.1/');
 		console.log('    │   │   │   ├── 5g_2x2_ch44/');
 		console.log('    │   │   │   │   └── report.xlsx');
@@ -344,25 +344,25 @@ server.listen(PORT, () => {
 		console.log('    │   │       └── 5g_2x2_ch44/');
 		console.log('    │   │           └── report.xlsx');
 		console.log('    │   └── SDG-8622/');
-		console.log('    │       ├── model.png        (device image - optional)');
+		console.log('    │       ├── device.png        (device image - optional)');
 		console.log('    ├── Eero/');
 		console.log('    │   ├── logo.png             (vendor logo - optional)');
 		console.log('    │   └── Max7/');
-		console.log('    │       ├── model.png        (device image - optional)');
+		console.log('    │       ├── device.png        (device image - optional)');
 		console.log('    │       └── 1.2.3/');
 		console.log('    │           └── 5g_4x4_ch149/');
 		console.log('    │               └── report.xlsx');
 		console.log('    └── Netgear/');
 		console.log('        ├── logo.png             (vendor logo - optional)');
 		console.log('        └── RAX80/');
-		console.log('            ├── model.png        (device image - optional)');
+		console.log('            ├── device.png        (device image - optional)');
 		console.log('            └── 3.0.1.4/');
 		console.log('                └── 5g_4x4_ch44/');
 		console.log('                    └── report.xlsx');
 		console.log('\nStructure requirements:');
 		console.log('  - Test configuration folders contain exactly one file: report.xlsx');
 		console.log('  - Test config folder names should describe the test (e.g., 5g_2x2_ch44, 2g_1x1_ch6)');
-		console.log('  - Image files: logo.png (vendor), model.png (device)');
+		console.log('  - Image files: logo.png (vendor), device.png (device)');
 		console.log('  - Supported image formats: PNG, JPG, JPEG, GIF, SVG');
 		console.log('  - Recommended size: 64x64px for logos, 128x96px for device images');
 	}

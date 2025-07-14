@@ -22,7 +22,7 @@ reports/
 ├── [Vendor Name]/
 │   ├── logo.png             (optional vendor logo)
 │   ├── [Model Name]/
-│   │   ├── model.png        (optional device image)
+│   │   ├── device.png        (optional device image)
 │   │   ├── [Software Version]/
 │   │   │   ├── [Test Config 1]/
 │   │   │   │   └── report.xlsx
@@ -34,7 +34,7 @@ reports/
 │   │       └── [Test Config]/
 │   │           └── report.xlsx
 │   └── [Another Model]/
-│       ├── model.png        (optional device image)
+│       ├── device.png        (optional device image)
 │       └── [Software Version]/
 │           └── [Test Config]/
 │               └── report.xlsx
@@ -50,7 +50,7 @@ reports/
 ├── Adtran/
 │   ├── logo.png             (Adtran company logo - 64x64px recommended)
 │   ├── SDG-8612/
-│   │   ├── model.png        (SDG-8612 device photo - 128x96px recommended)
+│   │   ├── device.png        (SDG-8612 device photo - 128x96px recommended)
 │   │   ├── 25.6.3.1/
 │   │   │   ├── 5g_2x2_ch44/
 │   │   │   │   └── report.xlsx
@@ -62,21 +62,21 @@ reports/
 │   │       └── 5g_2x2_ch44/
 │   │           └── report.xlsx
 │   └── SDG-8622/
-│       ├── model.png
+│       ├── device.png
 │       └── 3.1.0/
 │           └── 5g_4x4_ch44/
 │               └── report.xlsx
 ├── Eero/
 │   ├── logo.png
 │   └── Max7/
-│       ├── model.png
+│       ├── device.png
 │       └── 1.2.3/
 │           └── 5g_4x4_ch149/
 │               └── report.xlsx
 └── Netgear/
     ├── logo.png
     └── RAX80/
-        ├── model.png
+        ├── device.png
         └── 3.0.1.4/
             └── 5g_4x4_ch44/
                 └── report.xlsx
@@ -219,7 +219,7 @@ Returns the complete hierarchical structure of all reports.
       "logo": "Adtran/logo.png",
       "models": {
         "SDG-8612": {
-          "image": "Adtran/SDG-8612/model.png",
+          "image": "Adtran/SDG-8612/device.png",
           "versions": {
             "25.6.3.1": {
               "testConfigs": {
@@ -245,7 +245,7 @@ Search for reports matching the query across all hierarchy levels.
 ### GET /reports/[path]
 Download report files or retrieve images:
 - Excel reports: `/reports/vendor/model/version/testconfig/report.xlsx`
-- Images: `/reports/vendor/logo.png` or `/reports/vendor/model/model.png`
+- Images: `/reports/vendor/logo.png` or `/reports/vendor/model/device.png`
 
 ## Setting Up Reports
 
@@ -262,7 +262,7 @@ cp company_logo.png reports/Adtran/logo.png
 mkdir -p reports/Adtran/SDG-8612
 
 # Add device image (optional)
-cp device_photo.png reports/Adtran/SDG-8612/model.png
+cp device_photo.png reports/Adtran/SDG-8612/device.png
 
 # Create version and test config directories
 mkdir -p reports/Adtran/SDG-8612/25.6.3.1/5g_2x2_ch44
@@ -301,10 +301,10 @@ done
 - **Format**: PNG with transparency preferred
 - **Location**: `reports/[Vendor]/logo.png`
 
-### Device Images (model.png)
+### Device Images (device.png)
 - **Size**: 128x96 pixels recommended
 - **Format**: PNG or JPG
-- **Location**: `reports/[Vendor]/[Model]/model.png`
+- **Location**: `reports/[Vendor]/[Model]/device.png`
 
 Images are optional but enhance the visual experience when browsing reports.
 
@@ -349,7 +349,7 @@ done
 
 # Check for images
 echo -e "\nChecking for images..."
-find reports -name "logo.png" -o -name "model.png" | while read -r img; do
+find reports -name "logo.png" -o -name "device.png" | while read -r img; do
     echo "✓ Image: $img"
 done
 
@@ -357,7 +357,7 @@ done
 echo -e "\nStatistics:"
 echo "Vendors: $(find reports -maxdepth 1 -type d | tail -n +2 | wc -l)"
 echo "Reports: $(find reports -name "report.xlsx" | wc -l)"
-echo "Images: $(find reports \( -name "logo.png" -o -name "model.png" \) | wc -l)"
+echo "Images: $(find reports \( -name "logo.png" -o -name "device.png" \) | wc -l)"
 ```
 
 ## Support
