@@ -37,22 +37,22 @@
 
 			<div class="tab-content" id="serverTab">
 				<div class="search-bar">
-					<input type="text" id="reportSearch" placeholder="Search vendors, models, or versions..." 
+					<input type="text" id="reportSearch" placeholder="Search vendors, models, or versions..."
 						   oninput="searchReports(this.value)">
 					<button class="btn-small" onclick="refreshReports()">🔄 Refresh</button>
 				</div>
-				
+
 				<div class="quick-filters" style="margin-bottom: 15px;">
 					<span style="color: #888; margin-right: 10px;">Quick filters:</span>
 					<button class="btn-small" onclick="expandAllVendors()">Expand All</button>
 					<button class="btn-small" onclick="collapseAllVendors()">Collapse All</button>
 					<button class="btn-small" onclick="selectLatestVersions()">Select Latest Versions</button>
 				</div>
-				
+
 				<div class="report-browser" id="reportBrowser">
 					<div class="loading">Loading server reports...</div>
 				</div>
-				
+
 				<div class="selected-reports" id="selectedReports" style="display: none;">
 					<h4 style="margin: 15px 0 10px 0; color: #aaa;">Selected Reports:</h4>
 					<div id="selectedReportsList"></div>
@@ -78,7 +78,7 @@
 			<div class="file-list" id="fileList">
 				<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
 					<h4 style="color: #aaa; margin: 0;">
-						Loaded Reports: 
+						Loaded Reports:
 						<span id="fileCount" style="color: #00a0c8;">0 files from 0 devices</span>
 					</h4>
 					<div style="display: flex; gap: 10px;">
@@ -117,7 +117,7 @@
 			<h3 style="margin-bottom: 20px; color: #00a0c8;">Performance Statistics</h3>
 			<div class="stats-grid" id="statsGrid"></div>
 		</div>
-		
+
 		<div class="comparison-panel" style="display: none;" id="comparisonPanel">
 			<h3 style="margin-bottom: 20px; color: #00a0c8;">Device Comparison Summary</h3>
 			<div id="comparisonTable"></div>
