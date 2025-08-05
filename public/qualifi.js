@@ -37,6 +37,21 @@ function determineBand(frequency) {
 	}
 }
 
+// Helper function to format channel number correctly for display
+function formatChannelNumber(channel, band) {
+	if (band === '6G' && channel >= 191) {
+		// Convert 6G channel from continuation format to correct format
+		return channel - 190;
+	}
+	return channel;
+}
+
+// Helper function to get display channel string
+function getChannelDisplay(channel, band) {
+	const displayChannel = formatChannelNumber(channel, band);
+	return `CH${displayChannel}`;
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
 	loadServerReports();
@@ -1291,9 +1306,9 @@ function createTestTable(tests, deviceName, startIndex) {
 		bandCell.style.color = test.band === '2G' ? '#f72585' : test.band === '5G' ? '#00a0c8' : test.band === '6G' ? '#4361ee' : '#888';
 		row.appendChild(bandCell);
 
-		// Channel cell
+		// Channel cell with 6G conversion
 		const channelCell = document.createElement('td');
-		channelCell.textContent = `CH${test.channel}`;
+		channelCell.textContent = getChannelDisplay(test.channel, test.band);
 		channelCell.style.fontWeight = '500';
 		channelCell.style.color = '#e0e0e0';
 		row.appendChild(channelCell);
@@ -1449,7 +1464,8 @@ function formatTestName(test) {
 	// Format test name based on baseline (attenuation 0) configuration
 	// Include indicator if this is using TX-specific parameters
 	const prefix = test.direction && test.direction.includes('TX') ? '' : '';
-	return `${test.band || 'UNK'} CH${test.channel} ${test.bandwidth}MHz ${test.nss}SS ${test.mode}`;
+	const displayChannel = formatChannelNumber(test.channel, test.band);
+	return `${test.band || 'UNK'} CH${displayChannel} ${test.bandwidth}MHz ${test.nss}SS ${test.mode}`;
 }
 
 function updateChart() {
@@ -1658,7 +1674,8 @@ function drawChart(selectedTests) {
 
 								// Show actual PHY parameters at this attenuation level
 								if (point.band || point.channel) {
-									lines.push(`Band: ${point.band || fullTest.band || 'UNK'} | Channel: ${point.channel || fullTest.channel}`);
+									const displayChannel = formatChannelNumber(point.channel || fullTest.channel, point.band || fullTest.band);
+									lines.push(`Band: ${point.band || fullTest.band || 'UNK'} | Channel: ${displayChannel}`);
 								}
 
 								// Show bandwidth and spatial streams with TX/RX indicator
