@@ -169,6 +169,88 @@ const server = http.createServer((req, res) => {
 		return;
 	}
 
+	// API endpoint to find and serve PDF files with wildcard matching
+	if (pathname.startsWith('/api/pdf/')) {
+		const requestedPath = pathname.substring('/api/pdf/'.length);
+		console.log(`PDF file requested: ${requestedPath}`);
+
+		// Extract directory path (remove report.xlsx if present)
+		const dirPath = requestedPath.replace('/report.xlsx', '');
+		const fullDirPath = path.join(REPORTS_DIR, dirPath);
+
+		console.log(`Looking for PDF in directory: ${fullDirPath}`);
+
+		// Security check - ensure we're only serving files from REPORTS_DIR
+		const resolvedReportsDir = path.resolve(REPORTS_DIR);
+		const resolvedDirPath = path.resolve(fullDirPath);
+
+		if (!resolvedDirPath.startsWith(resolvedReportsDir + path.sep) && resolvedDirPath !== resolvedReportsDir) {
+			console.log('Security check failed: Path traversal attempt detected');
+			res.writeHead(403, corsHeaders);
+			res.end('Forbidden: Path traversal not allowed');
+			return;
+		}
+
+		// Check if directory exists
+		if (!fs.existsSync(fullDirPath)) {
+			console.log(`Directory not found: ${fullDirPath}`);
+			res.writeHead(404, corsHeaders);
+			res.end('Directory not found');
+			return;
+		}
+
+		try {
+			// Read directory contents
+			const files = fs.readdirSync(fullDirPath);
+
+			// Find PDF file matching the pattern
+			const pdfFile = files.find(file =>
+				file.toLowerCase().startsWith('rate-vs-range-report') &&
+				file.toLowerCase().endsWith('.pdf')
+			);
+
+			if (!pdfFile) {
+				console.log(`No PDF file found in directory: ${fullDirPath}`);
+				console.log('Available files:', files);
+				res.writeHead(404, corsHeaders);
+				res.end('PDF file not found');
+				return;
+			}
+
+			console.log(`Found PDF file: ${pdfFile}`);
+			const pdfPath = path.join(fullDirPath, pdfFile);
+
+			// Serve the PDF file
+			fs.readFile(pdfPath, (readErr, data) => {
+				if (readErr) {
+					console.log(`Error reading PDF file: ${readErr.message}`);
+					res.writeHead(500, corsHeaders);
+					res.end('Failed to read PDF file');
+					return;
+				}
+
+				console.log(`Serving PDF file: ${pdfPath} (${data.length} bytes)`);
+
+				const headers = {
+					'Content-Type': 'application/pdf',
+					'Content-Length': data.length,
+					'Content-Disposition': `attachment; filename="${pdfFile}"`,
+					...corsHeaders
+				};
+
+				res.writeHead(200, headers);
+				res.end(data);
+			});
+
+		} catch (error) {
+			console.error(`Error accessing directory ${fullDirPath}:`, error);
+			res.writeHead(500, corsHeaders);
+			res.end('Internal server error');
+		}
+
+		return;
+	}
+
 	// Serve report files and images
 	if (pathname.startsWith('/reports/')) {
 		const requestedPath = pathname.substring('/reports/'.length);

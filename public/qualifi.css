@@ -874,6 +874,19 @@ h3, h4 {
 .test-table .file-cell {
 	color: #666;
 	font-size: 0.75em;
+	text-align: center;
+}
+
+.test-table .file-cell a {
+	display: inline-block;
+	font-size: 1.2em;
+	transition: transform 0.2s ease, opacity 0.2s ease;
+	text-decoration: none;
+}
+
+.test-table .file-cell a:hover {
+	transform: scale(1.2);
+	opacity: 0.8;
 }
 
 .device-group-info {

@@ -450,7 +450,7 @@ async function loadSelectedReports() {
 					const fileName = `${vendor}_${model}_v${version}_${testConfig}_${testConfigData.name}`;
 					const virtualFile = new File([blob], fileName, { type: blob.type });
 					
-					await loadExcelFile(virtualFile, true); // true indicates from server
+					await loadExcelFile(virtualFile, true, testConfigData.path); // true indicates from server, pass original path
 					loadedCount++;
 					console.log(`Successfully loaded: ${fileName}`);
 					
@@ -552,7 +552,7 @@ async function handleFiles(files) {
 	}
 }
 
-async function loadExcelFile(file, fromServer = false) {
+async function loadExcelFile(file, fromServer = false, serverPath = null) {
 	console.log(`Loading file: ${file.name}${fromServer ? ' (from server)' : ' (local)'}`);
 	try {
 		const arrayBuffer = await file.arrayBuffer();
@@ -577,12 +577,20 @@ async function loadExcelFile(file, fromServer = false) {
 			return;
 		}
 
+		// Add server path information to each test if loaded from server
+		if (fromServer && serverPath) {
+			rvrData.forEach(test => {
+				test.serverPath = serverPath;
+			});
+		}
+
 		// Store the loaded file data
 		loadedFiles.set(file.name, {
 			deviceInfo: deviceInfo,
 			rvrData: rvrData,
 			fileName: file.name,
-			fromServer: fromServer
+			fromServer: fromServer,
+			serverPath: serverPath
 		});
 
 		// Update UI
@@ -1118,7 +1126,8 @@ function updateTestOptions() {
 				...test,
 				fileName: fileName,
 				deviceInfo: fileData.deviceInfo,
-				fromServer: fileData.fromServer
+				fromServer: fileData.fromServer,
+				serverPath: test.serverPath // Preserve server path for download URLs
 			});
 		});
 	});
@@ -1252,7 +1261,7 @@ function createTestTable(tests, deviceName, startIndex) {
 			<th>NSS</th>
 			<th>Mode</th>
 			<th>Version</th>
-			<th>File</th>
+			<th style="width: 80px;">Files</th>
 		</tr>
 	`;
 	table.appendChild(thead);
@@ -1315,13 +1324,37 @@ function createTestTable(tests, deviceName, startIndex) {
 		versionCell.textContent = `v${version}`;
 		row.appendChild(versionCell);
 		
-		// File cell
+		// Files cell with download icons
 		const fileCell = document.createElement('td');
 		fileCell.className = 'file-cell';
-		const source = test.fromServer ? '☁️' : '📁';
-		const shortFileName = test.fileName.length > 25 ? 
-			test.fileName.substring(0, 22) + '...' : test.fileName;
-		fileCell.innerHTML = `${source} ${shortFileName}`;
+		fileCell.style.textAlign = 'left';
+
+		if (test.fromServer && test.serverPath) {
+			// Use the original server path to construct download URLs
+			const serverPath = test.serverPath;
+
+			// For Excel: use the exact path the file was loaded from
+			const excelPath = `/reports/${serverPath}`;
+
+			// For PDF: use the new API endpoint that finds the PDF with wildcard matching
+			const pdfPath = `/api/pdf/${serverPath}`;
+
+			fileCell.innerHTML = `
+				<a href="${excelPath}" download title="Download Excel Report" style="margin-right: 8px; color: #00a0c8; text-decoration: none;">
+					📊
+				</a>
+				<a href="${pdfPath}" download title="Download PDF Report" style="color: #f72585; text-decoration: none;">
+					📄
+				</a>
+			`;
+		} else {
+			// For local files, show indicator that files are not available for download
+			fileCell.innerHTML = `
+				<span title="Local file - server downloads not available" style="color: #666;">
+					📁
+				</span>
+			`;
+		}
 		row.appendChild(fileCell);
 		
 		// Add hover effect to row
