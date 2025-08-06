@@ -1,4 +1,5 @@
 let chartInstance = null;
+let isBatchLoading = false;
 let loadedFiles = new Map();
 let chartType = 'line';
 let serverReports = null;
@@ -413,7 +414,6 @@ function compareVersions(a, b) {
 	return 0;
 }
 
-// Fixed loadSelectedReports function
 async function loadSelectedReports() {
 	if (selectedServerReports.size === 0) {
 		console.log('No reports selected');
@@ -426,6 +426,9 @@ async function loadSelectedReports() {
 	loadingMsg.className = 'loading';
 	loadingMsg.textContent = 'Loading reports from server...';
 	document.body.appendChild(loadingMsg);
+
+	// Set batch loading flag to prevent DOM updates
+	isBatchLoading = true;
 
 	try {
 		let loadedCount = 0;
@@ -486,10 +489,19 @@ async function loadSelectedReports() {
 			cb.checked = false;
 		});
 
+		// Re-enable DOM updates and update everything once
+		isBatchLoading = false;
+		updateFileList();
+		updateTestOptions();
+
 		// Switch to test selector if files loaded
 		if (loadedFiles.size > 0) {
-			document.querySelector('.test-selector').scrollIntoView({ behavior: 'smooth' });
 			showSuccess(`Successfully loaded ${loadedCount} test configurations from server`);
+
+			// Delay scrolling until after all DOM updates are complete
+			setTimeout(() => {
+				document.querySelector('.test-selector').scrollIntoView({ behavior: 'smooth' });
+			}, 100);
 		} else {
 			showError('No valid test configurations were loaded');
 		}
@@ -498,6 +510,8 @@ async function loadSelectedReports() {
 		console.error('Error loading reports:', error);
 		showError(`Failed to load reports from server: ${error.message}`);
 	} finally {
+		// Always re-enable DOM updates and remove loading message
+		isBatchLoading = false;
 		loadingMsg.remove();
 	}
 }
@@ -608,16 +622,18 @@ async function loadExcelFile(file, fromServer = false, serverPath = null) {
 			serverPath: serverPath
 		});
 
-		// Update UI
-		updateFileList();
-		updateTestOptions();
+		// Only update UI if not in batch loading mode
+		if (!isBatchLoading) {
+			updateFileList();
+			updateTestOptions();
 
-		// Show success message with data summary
-		const totalDataPoints = rvrData.reduce((sum, test) => sum + test.data.length, 0);
-		console.log(`Successfully loaded ${file.name}: ${rvrData.length} test configurations, ${totalDataPoints} data points`);
+			// Show success message with data summary
+			const totalDataPoints = rvrData.reduce((sum, test) => sum + test.data.length, 0);
+			console.log(`Successfully loaded ${file.name}: ${rvrData.length} test configurations, ${totalDataPoints} data points`);
 
-		// Show brief success notification
-		showSuccess(`Loaded ${file.name} - ${rvrData.length} test configurations`);
+			// Show brief success notification
+			showSuccess(`Loaded ${file.name} - ${rvrData.length} test configurations`);
+		}
 
 	} catch (error) {
 		console.error('Error loading Excel file:', error);
@@ -2021,16 +2037,21 @@ function showError(message) {
 function showSuccess(message) {
 	const success = document.createElement('div');
 	success.style.cssText = `
+		position: fixed;
+		top: 20px;
+		right: 20px;
 		background: rgba(34, 197, 94, 0.1);
 		border: 1px solid rgba(34, 197, 94, 0.3);
 		color: #86efac;
 		padding: 15px;
 		border-radius: 8px;
-		margin: 20px 0;
 		font-family: 'Poppins', sans-serif;
 		font-weight: 400;
+		z-index: 1000;
+		max-width: 400px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 	`;
 	success.textContent = message;
-	document.querySelector('.container').prepend(success);
+	document.body.appendChild(success);
 	setTimeout(() => success.remove(), 3000);
 }
