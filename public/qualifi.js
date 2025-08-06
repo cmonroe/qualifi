@@ -920,13 +920,17 @@ function extractRvRData(workbook) {
 				if (test.data.length > 0) {
 					test.data.sort((a, b) => a.attenuation - b.attenuation);
 
-					// Set mode based on the mode at attenuation 0 (or closest to 0)
-					const modeAtZero = test.data.find(point => point.attenuation === 0);
-					if (modeAtZero) {
-						test.mode = modeAtZero.mode;
+					// Set mode, bandwidth, and NSS based on the values at attenuation 0 (or closest to 0)
+					const baselinePoint = test.data.find(point => point.attenuation === 0);
+					if (baselinePoint) {
+						test.mode = baselinePoint.mode;
+						test.bandwidth = baselinePoint.bandwidth;
+						test.nss = baselinePoint.nss;
 					} else if (test.data.length > 0) {
-						// Use the mode from the first (lowest attenuation) data point
+						// Use the values from the first (lowest attenuation) data point
 						test.mode = test.data[0].mode;
+						test.bandwidth = test.data[0].bandwidth;
+						test.nss = test.data[0].nss;
 					}
 
 					tests.push(test);
