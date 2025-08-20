@@ -394,6 +394,15 @@ main {
 	overflow: hidden;
 }
 
+.chart-button-clear {
+	/* Style the Clear Selection button differently */
+	background: linear-gradient(135deg, rgba(255, 59, 48, 0.8) 0%, rgba(200, 30, 30, 0.8) 100%);
+}
+
+.chart-button-clear:hover {
+	box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
+}
+
 .chart-button::before {
 	content: '';
 	position: absolute;
@@ -598,6 +607,7 @@ main {
 .selected-report-item {
 	display: flex;
 	align-items: center;
+	justify-content: space-between;
 	gap: var(--space-sm);
 	padding: var(--space-xs) var(--space-sm);
 	margin-bottom: 4px;
@@ -615,7 +625,7 @@ main {
 
 .selected-report-item button {
 	flex-shrink: 0;
-	order: -1; /* Move button to the start */
+	margin-left: auto;
 }
 
 .selected-report-item span {
@@ -823,10 +833,21 @@ main {
 
 .chart-controls {
 	display: flex;
-	gap: var(--space-sm);
+	justify-content: space-between;
+	align-items: center;
 	margin-bottom: var(--space-lg);
 	padding-bottom: var(--space-md);
 	border-bottom: 1px solid var(--border-subtle);
+}
+
+.chart-controls-left {
+	display: flex;
+	gap: var(--space-sm);
+}
+
+.chart-controls-right {
+	display: flex;
+	gap: var(--space-sm);
 }
 
 .chart-wrapper {
@@ -1119,6 +1140,13 @@ main {
 	}
 
 	.chart-controls {
+		flex-direction: column;
+		gap: var(--space-md);
+	}
+
+	.chart-controls-left,
+	.chart-controls-right {
+		width: 100%;
 		flex-wrap: wrap;
 	}
 

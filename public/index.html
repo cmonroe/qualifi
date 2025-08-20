@@ -179,10 +179,14 @@
 
 			<div class="chart-container" style="display: none;">
 				<div class="chart-controls">
-					<button class="chart-button" onclick="toggleChartType()">Toggle Chart Type</button>
-					<button class="chart-button" onclick="exportChart()">Export Chart</button>
-					<button class="chart-button" onclick="resetZoom()">Reset Zoom</button>
-					<button class="chart-button" onclick="exportComparison()">Export Comparison</button>
+					<div class="chart-controls-left">
+						<button class="chart-button" onclick="toggleChartType()">Toggle Chart Type</button>
+						<button class="chart-button" onclick="exportChart()">Export Chart</button>
+						<button class="chart-button" onclick="exportCSV()">Export CSV Data</button>
+					</div>
+					<div class="chart-controls-right">
+						<button class="chart-button chart-button-clear" onclick="clearChartSelection()">Clear Selection</button>
+					</div>
 				</div>
 				<div class="chart-wrapper">
 					<canvas id="rvrChart"></canvas>

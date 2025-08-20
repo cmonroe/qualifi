@@ -1459,6 +1459,20 @@ window.selectNoneTests = function() {
 	updateChart();
 };
 
+window.clearChartSelection = function() {
+	// Clear all test selections
+	const checkboxes = document.querySelectorAll('.test-checkbox');
+	checkboxes.forEach(cb => cb.checked = false);
+
+	// Hide chart and related panels
+	document.querySelector('.chart-container').style.display = 'none';
+	document.querySelector('.stats-panel').style.display = 'none';
+	document.querySelector('#comparisonPanel').style.display = 'none';
+
+	// Show a success notification
+	showSuccess('All test selections cleared');
+};
+
 window.selectMatchingTests = function() {
 	// Select one test from each device that has the same configuration
 	const checkboxes = document.querySelectorAll('.test-checkbox');
@@ -1902,12 +1916,6 @@ function exportChart() {
 	link.click();
 }
 
-function resetZoom() {
-	if (chartInstance) {
-		chartInstance.resetZoom();
-	}
-}
-
 function updateComparisonTable(selectedTests) {
 	const container = document.getElementById('comparisonTable');
 
@@ -1984,7 +1992,7 @@ function updateComparisonTable(selectedTests) {
 	container.innerHTML = html;
 }
 
-function exportComparison() {
+function exportCSV() {
 	const selectedTests = [];
 	const checkboxes = document.querySelectorAll('.test-checkbox:checked');
 
