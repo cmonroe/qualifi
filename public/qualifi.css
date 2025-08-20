@@ -505,6 +505,18 @@ main {
 	background-color: var(--bg-hover);
 }
 
+.model-header .toggle-icon {
+	margin-right: var(--space-xs);
+	transition: transform var(--transition-fast);
+	opacity: 0.5;
+	font-size: 0.75rem;
+}
+
+.model-header.expanded .toggle-icon {
+	transform: rotate(90deg);
+	opacity: 0.7;
+}
+
 .model-image {
 	width: 32px;
 	height: 24px;
