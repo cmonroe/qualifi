@@ -57,138 +57,149 @@
 				// Give Berkeley Mono a moment to load if it's available
 				setTimeout(function() {
 					if (!checkFont('Berkeley Mono')) {
-						console.log('Berkeley Mono not found, falling back to Poppins');
+						console.log('Berkeley Mono not found, loading Poppins as fallback');
 						window.QUALIFI_FONT = 'Poppins';
 						loadPoppins();
 
-						// Update CSS custom property for dynamic font switching
-						document.documentElement.style.setProperty('--primary-font', 'Poppins');
+						// Update CSS custom properties for Poppins
+						document.documentElement.style.setProperty('--primary-font', "'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif");
 						document.documentElement.style.setProperty('--chart-font', "'Poppins', sans-serif");
+
+						// Adjust font weights for Poppins (slightly lighter than monospace)
+						document.documentElement.style.setProperty('--font-weight-normal', '400');
+						document.documentElement.style.setProperty('--font-weight-medium', '500');
+						document.documentElement.style.setProperty('--font-weight-bold', '600');
 					} else {
 						console.log('Berkeley Mono detected and loaded');
-						document.documentElement.style.setProperty('--primary-font', 'Berkeley Mono');
+						document.documentElement.style.setProperty('--primary-font', "'Berkeley Mono', monospace");
 						document.documentElement.style.setProperty('--chart-font', "'Berkeley Mono', monospace");
+
+						// Berkeley Mono font weights
+						document.documentElement.style.setProperty('--font-weight-normal', '400');
+						document.documentElement.style.setProperty('--font-weight-medium', '500');
+						document.documentElement.style.setProperty('--font-weight-bold', '700');
 					}
 
 					// Trigger a custom event that the main JS can listen for
 					window.dispatchEvent(new CustomEvent('fontLoaded', { detail: { font: window.QUALIFI_FONT } }));
-				}, 500);
+				}, 100);
 			});
 		})();
 	</script>
 </head>
 <body>
 	<header>
-		<div class="container">
-			<div class="header-content">
-				<img src="skunk.png" alt="Skunk Logo" class="header-logo" onerror="this.style.display='none'">
-				<div class="header-text">
-					<h1>QualiFi</h1>
-					<p class="subheader">SDG RvR Analyzer</p>
-				</div>
+		<div class="header-content">
+			<div class="header-text">
+				<h1>QualiFi</h1>
+				<p class="subheader">SDG RvR Analyzer</p>
+			</div>
+			<div class="logo-container">
+				<img src="logo.png" alt="Logo" class="header-logo" onerror="this.style.display='none'">
 			</div>
 		</div>
 	</header>
 
-	<div class="container">
-		<div class="control-panel">
-			<div class="source-tabs">
-				<button class="tab-button active" onclick="switchTab('server')">
-					<span class="tab-icon">☁️</span> Server Reports
-				</button>
-				<button class="tab-button" onclick="switchTab('local')">
-					<span class="tab-icon">📁</span> Local Files
-				</button>
-			</div>
-
-			<div class="tab-content" id="serverTab">
-				<div class="search-bar">
-					<input type="text" id="reportSearch" placeholder="Search vendors, models, or versions..."
-						   oninput="searchReports(this.value)">
-					<button class="btn-small" onclick="refreshReports()">🔄 Refresh</button>
-				</div>
-
-				<div class="quick-filters" style="margin-bottom: 15px;">
-					<span style="color: #888; margin-right: 10px;">Quick filters:</span>
-					<button class="btn-small" onclick="expandAllVendors()">Expand All</button>
-					<button class="btn-small" onclick="collapseAllVendors()">Collapse All</button>
-					<button class="btn-small" onclick="selectLatestVersions()">Select Latest Versions</button>
-				</div>
-
-				<div class="report-browser" id="reportBrowser">
-					<div class="loading">Loading server reports...</div>
-				</div>
-
-				<div class="selected-reports" id="selectedReports" style="display: none;">
-					<h4 style="margin: 15px 0 10px 0; color: #aaa;">Selected Reports:</h4>
-					<div id="selectedReportsList"></div>
-					<button class="chart-button" style="margin-top: 15px;" onclick="loadSelectedReports()">
-						Load Selected Reports
+	<main>
+		<div class="container">
+			<div class="control-panel">
+				<div class="source-tabs">
+					<button class="tab-button active" onclick="switchTab('server')">
+						<span class="tab-icon">⬇</span> Server Reports
+					</button>
+					<button class="tab-button" onclick="switchTab('local')">
+						<span class="tab-icon">📁</span> Local Files
 					</button>
 				</div>
-			</div>
 
-			<div class="tab-content" id="localTab" style="display: none;">
-				<div class="file-selector">
-					<label for="excelFile">Upload Excel Test Reports:</label>
-					<div class="file-input-wrapper">
-						<input type="file" id="excelFile" accept=".xlsx,.xls" multiple>
-						<label for="excelFile" class="file-input-label">
-							📁 Click to select Excel files or drag & drop here<br>
-							<span style="font-size: 0.85em; color: #888;">Load multiple files to compare different devices</span>
-						</label>
+				<div class="tab-content" id="serverTab">
+					<div class="search-bar">
+						<input type="text" id="reportSearch" placeholder="Search vendors, models, or versions..."
+							   oninput="searchReports(this.value)">
+						<button class="btn-small" onclick="refreshReports()">↻ Refresh</button>
 					</div>
-				</div>
-			</div>
 
-			<div class="file-list" id="fileList">
-				<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-					<h4 style="color: #aaa; margin: 0;">
-						Loaded Reports:
-						<span id="fileCount" style="color: #00a0c8;">0 files from 0 devices</span>
-					</h4>
-					<div style="display: flex; gap: 10px;">
-						<button class="btn-small" onclick="clearServerFiles()">Clear Server</button>
-						<button class="btn-small" onclick="clearLocalFiles()">Clear Local</button>
-						<button class="btn-small" onclick="clearAllFiles()" style="background: rgba(220, 38, 38, 0.2); border: 1px solid rgba(220, 38, 38, 0.3);">
-							Clear All
+					<div class="quick-filters">
+						<span>Quick actions:</span>
+						<button class="btn-small" onclick="expandAllVendors()">Expand All</button>
+						<button class="btn-small" onclick="collapseAllVendors()">Collapse All</button>
+						<button class="btn-small" onclick="selectLatestVersions()">Select Latest</button>
+					</div>
+
+					<div class="report-browser" id="reportBrowser">
+						<div class="loading">Loading server reports...</div>
+					</div>
+
+					<div class="selected-reports" id="selectedReports" style="display: none;">
+						<h4 style="margin: 24px 0 16px 0;">Selected Reports:</h4>
+						<div id="selectedReportsList"></div>
+						<button class="chart-button" style="margin-top: 16px;" onclick="loadSelectedReports()">
+							Load Selected Reports
 						</button>
 					</div>
 				</div>
-				<div id="fileItems"></div>
-			</div>
 
-			<div class="test-selector" style="display: none;">
-				<h3>Select Test Configurations to Compare:</h3>
-				<div id="filterNotice" style="display: none; background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); padding: 10px; border-radius: 6px; margin-bottom: 15px; color: #ffc107; font-size: 0.9em;">
-					⚠️ Invalid data points (channel=0 or throughput=0) have been automatically filtered out<br>
-					ℹ️ DUT-TX tests use TX-specific columns (TX BW, TX NSS, TX Mode) when available<br>
-					ℹ️ DUT-RX tests use RX-specific columns (RX BW, RX NSS, RX Mode) when available
+				<div class="tab-content" id="localTab" style="display: none;">
+					<div class="file-selector">
+						<div class="file-input-wrapper">
+							<input type="file" id="excelFile" accept=".xlsx,.xls" multiple>
+							<label for="excelFile" class="file-input-label">
+								📊 Click to select Excel files or drag & drop here<br>
+								<span style="font-size: 0.85em; opacity: 0.7;">Load multiple files to compare different devices</span>
+							</label>
+						</div>
+					</div>
 				</div>
-				<div class="test-options" id="testOptions"></div>
+
+				<div class="file-list" id="fileList">
+					<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+						<h4>
+							Loaded Reports:
+							<span id="fileCount">0 files from 0 devices</span>
+						</h4>
+						<div style="display: flex; gap: 8px;">
+							<button class="btn-small" onclick="clearServerFiles()">Clear Server</button>
+							<button class="btn-small" onclick="clearLocalFiles()">Clear Local</button>
+							<button class="btn-small btn-remove" onclick="clearAllFiles()">Clear All</button>
+						</div>
+					</div>
+					<div id="fileItems"></div>
+				</div>
+
+				<div class="test-selector" style="display: none;">
+					<h3>Select Test Configurations to Compare</h3>
+					<div id="filterNotice" style="display: none;">
+						⚠ Invalid data points (channel=0 or throughput=0) have been automatically filtered out<br>
+						ℹ DUT-TX tests use TX-specific columns (TX BW, TX NSS, TX Mode) when available<br>
+						ℹ DUT-RX tests use RX-specific columns (RX BW, RX NSS, RX Mode) when available
+					</div>
+					<div class="test-options" id="testOptions"></div>
+				</div>
+			</div>
+
+			<div class="chart-container" style="display: none;">
+				<div class="chart-controls">
+					<button class="chart-button" onclick="toggleChartType()">Toggle Chart Type</button>
+					<button class="chart-button" onclick="exportChart()">Export Chart</button>
+					<button class="chart-button" onclick="resetZoom()">Reset Zoom</button>
+					<button class="chart-button" onclick="exportComparison()">Export Comparison</button>
+				</div>
+				<div class="chart-wrapper">
+					<canvas id="rvrChart"></canvas>
+				</div>
+			</div>
+
+			<div class="stats-panel" style="display: none;">
+				<h3>Performance Statistics</h3>
+				<div class="stats-grid" id="statsGrid"></div>
+			</div>
+
+			<div class="comparison-panel" style="display: none;" id="comparisonPanel">
+				<h3>Device Comparison Summary</h3>
+				<div id="comparisonTable"></div>
 			</div>
 		</div>
-
-		<div class="chart-container" style="display: none;">
-			<div class="chart-controls">
-				<button class="chart-button" onclick="toggleChartType()">Toggle Chart Type</button>
-				<button class="chart-button" onclick="exportChart()">Export Chart</button>
-				<button class="chart-button" onclick="resetZoom()">Reset Zoom</button>
-				<button class="chart-button" onclick="exportComparison()">Export Comparison</button>
-			</div>
-			<canvas id="rvrChart"></canvas>
-		</div>
-
-		<div class="stats-panel" style="display: none;">
-			<h3 style="margin-bottom: 20px; color: #00a0c8;">Performance Statistics</h3>
-			<div class="stats-grid" id="statsGrid"></div>
-		</div>
-
-		<div class="comparison-panel" style="display: none;" id="comparisonPanel">
-			<h3 style="margin-bottom: 20px; color: #00a0c8;">Device Comparison Summary</h3>
-			<div id="comparisonTable"></div>
-		</div>
-	</div>
+	</main>
 
 	<script src="qualifi.js"></script>
 </body>
