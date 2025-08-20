@@ -4,6 +4,7 @@ let loadedFiles = new Map();
 let chartType = 'line';
 let serverReports = null;
 let selectedServerReports = new Set();
+let activeNotifications = [];
 
 // Set Chart.js global font - will be updated when font loads
 Chart.defaults.font.family = "var(--primary-font)";
@@ -2053,6 +2054,31 @@ function showError(message) {
 	setTimeout(() => error.remove(), 5000);
 }
 
+function calculateNotificationPosition() {
+	let totalOffset = 20; // Initial top margin
+
+	for (let i = 0; i < activeNotifications.length; i++) {
+		const notification = activeNotifications[i];
+		if (i > 0) {
+			// Add the height of the previous notification plus spacing
+			const prevNotification = activeNotifications[i - 1];
+			const prevHeight = prevNotification.offsetHeight || 50; // Default height if not rendered yet
+			totalOffset += prevHeight + 10; // 10px spacing between notifications
+		}
+	}
+
+	return totalOffset;
+}
+
+function repositionNotifications() {
+	let currentTop = 20;
+
+	activeNotifications.forEach((notification, index) => {
+		notification.style.top = `${currentTop}px`;
+		currentTop += notification.offsetHeight + 10; // Add height plus spacing
+	});
+}
+
 function showSuccess(message) {
 	const success = document.createElement('div');
 	const fontFamily = window.QUALIFI_FONT === 'Berkeley Mono' ?
@@ -2063,8 +2089,8 @@ function showSuccess(message) {
 		position: fixed;
 		top: 20px;
 		right: 20px;
-		background: rgba(34, 197, 94, 0.1);
-		border: 1px solid rgba(34, 197, 94, 0.3);
+		background: rgba(34, 197, 94, 0.4);
+		border: 1px solid rgba(34, 197, 94, 0.6);
 		color: #86efac;
 		padding: 15px;
 		border-radius: 8px;
@@ -2073,8 +2099,39 @@ function showSuccess(message) {
 		z-index: 1000;
 		max-width: 400px;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+		transition: all 0.3s ease;
+		opacity: 0;
 	`;
 	success.textContent = message;
 	document.body.appendChild(success);
-	setTimeout(() => success.remove(), 3000);
+
+	// Add to active notifications
+	activeNotifications.push(success);
+
+	// Force layout calculation before positioning
+	success.offsetHeight;
+
+	// Position based on existing notifications
+	const topOffset = calculateNotificationPosition();
+	success.style.top = `${topOffset}px`;
+
+	// Fade in
+	setTimeout(() => {
+		success.style.opacity = '1';
+	}, 10);
+
+	// Remove after 3 seconds and update positions
+	setTimeout(() => {
+		success.style.opacity = '0';
+		setTimeout(() => {
+			const index = activeNotifications.indexOf(success);
+			if (index > -1) {
+				activeNotifications.splice(index, 1);
+				success.remove();
+
+				// Reposition remaining notifications
+				repositionNotifications();
+			}
+		}, 300);
+	}, 6000);
 }
