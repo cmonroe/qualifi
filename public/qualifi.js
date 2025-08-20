@@ -1705,12 +1705,12 @@ function drawChart(selectedTests) {
 								const lines = [];
 
 								// Device and throughput info
-								lines.push(`${deviceName}: ${context.parsed.y} Mbps`);
+								lines.push(` ${deviceName}: ${context.parsed.y} Mbps`);
 
 								// Show actual PHY parameters at this attenuation level
 								if (point.band || point.channel) {
 									const displayChannel = formatChannelNumber(point.channel || fullTest.channel, point.band || fullTest.band);
-									lines.push(`Band: ${point.band || fullTest.band || 'UNK'} | Channel: ${displayChannel}`);
+									lines.push(` Band: ${point.band || fullTest.band || 'UNK'} | Channel: ${displayChannel}`);
 								}
 
 								// Show bandwidth and spatial streams with TX/RX indicator
@@ -1719,19 +1719,19 @@ function drawChart(selectedTests) {
 								const direction = point.direction || fullTest.direction;
 								const paramType = direction && direction.includes('TX') ? 'TX' :
 										 direction && direction.includes('RX') ? 'RX' : 'PHY';
-								lines.push(`${paramType} Config: ${actualBW}MHz ${actualNSS}SS`);
+								lines.push(` ${paramType} Config: ${actualBW}MHz ${actualNSS}SS`);
 
 								// Show mode and security
 								if (point.mode || point.security) {
 									const direction = point.direction || fullTest.direction;
 									const paramType = direction && direction.includes('TX') ? 'TX' :
 											 direction && direction.includes('RX') ? 'RX' : 'PHY';
-									lines.push(`${paramType} Mode: ${point.mode || 'Unknown'} | Security: ${point.security || fullTest.security}`);
+									lines.push(` ${paramType} Mode: ${point.mode || 'Unknown'} | Security: ${point.security || fullTest.security}`);
 								}
 
 								// Show frequency if available
 								if (point.frequency && point.frequency > 0) {
-									lines.push(`Frequency: ${point.frequency} MHz`);
+									lines.push(` Frequency: ${point.frequency} MHz`);
 								}
 
 								// Show if parameters have degraded from baseline (attenuation 0 or first point)
@@ -1759,7 +1759,7 @@ function drawChart(selectedTests) {
 									}
 
 									if (degradations.length > 0) {
-										lines.push(`⚠️ Degraded: ${degradations.join(', ')}`);
+										lines.push(` ⚠️ Degraded: ${degradations.join(', ')}`);
 									}
 								}
 
@@ -1767,7 +1767,7 @@ function drawChart(selectedTests) {
 							}
 
 							// Fallback to simple display
-							return [`${deviceName}: ${context.parsed.y} Mbps @ ${context.parsed.x} dB`];
+							return [` ${deviceName}: ${context.parsed.y} Mbps @ ${context.parsed.x} dB`];
 						},
 						beforeLabel: function(context) {
 							// Add a separator line before each dataset's info for clarity
