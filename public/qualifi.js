@@ -5,9 +5,24 @@ let chartType = 'line';
 let serverReports = null;
 let selectedServerReports = new Set();
 
-// Set Chart.js global font
-Chart.defaults.font.family = "'Poppins', sans-serif";
+// Set Chart.js global font - will be updated when font loads
+Chart.defaults.font.family = "var(--primary-font)";
 Chart.defaults.color = '#e0e0e0';
+
+// Listen for font loading completion and update Chart.js
+window.addEventListener('fontLoaded', function(event) {
+	const fontFamily = event.detail.font === 'Berkeley Mono' ?
+		"'Berkeley Mono', 'Courier New', monospace" :
+		"'Poppins', sans-serif";
+
+	Chart.defaults.font.family = fontFamily;
+	console.log('Chart.js font updated to:', fontFamily);
+
+	// Redraw chart if it exists
+	if (chartInstance) {
+		chartInstance.update();
+	}
+});
 
 // Helper function to create image element with fallback
 function createImageElement(src, className, alt = '') {
@@ -1322,14 +1337,14 @@ function createTestTable(tests, deviceName, startIndex) {
 		// Band cell
 		const bandCell = document.createElement('td');
 		bandCell.textContent = test.band || 'UNK';
-		bandCell.style.fontWeight = '500';
+		bandCell.style.fontWeight = '700';
 		bandCell.style.color = test.band === '2G' ? '#f72585' : test.band === '5G' ? '#00a0c8' : test.band === '6G' ? '#4361ee' : '#888';
 		row.appendChild(bandCell);
 
 		// Channel cell with 6G conversion
 		const channelCell = document.createElement('td');
 		channelCell.textContent = getChannelDisplay(test.channel, test.band);
-		channelCell.style.fontWeight = '500';
+		channelCell.style.fontWeight = '700';
 		channelCell.style.color = '#e0e0e0';
 		row.appendChild(channelCell);
 
@@ -1349,7 +1364,7 @@ function createTestTable(tests, deviceName, startIndex) {
 		const modeCell = document.createElement('td');
 		modeCell.textContent = test.mode || 'Unknown';
 		modeCell.style.color = '#ccc';
-		modeCell.style.fontWeight = '500';
+		modeCell.style.fontWeight = '700';
 		row.appendChild(modeCell);
 
 		// Version cell
@@ -1627,8 +1642,8 @@ function drawChart(selectedTests) {
 					color: '#e0e0e0',
 					font: {
 						size: 18,
-						weight: '600',
-						family: "'Poppins', sans-serif"
+						weight: '700',
+						family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif"
 					}
 				},
 				subtitle: {
@@ -1637,7 +1652,7 @@ function drawChart(selectedTests) {
 					color: '#aaa',
 					font: {
 						size: 14,
-						family: "'Poppins', sans-serif"
+						family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif"
 					}
 				},
 				legend: {
@@ -1649,7 +1664,7 @@ function drawChart(selectedTests) {
 						color: '#888',
 						font: {
 							size: 10,
-							family: "'Poppins', sans-serif",
+							family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif",
 							weight: 'normal'
 						},
 						padding: 5
@@ -1659,7 +1674,7 @@ function drawChart(selectedTests) {
 						padding: 15,
 						font: {
 							size: 11,
-							family: "'Poppins', sans-serif"
+							family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif"
 						}
 					}
 				},
@@ -1771,7 +1786,7 @@ function drawChart(selectedTests) {
 						color: '#e0e0e0',
 						font: {
 							size: 14,
-							family: "'Poppins', sans-serif"
+							family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif"
 						}
 					},
 					grid: {
@@ -1790,7 +1805,7 @@ function drawChart(selectedTests) {
 						color: '#e0e0e0',
 						font: {
 							size: 14,
-							family: "'Poppins', sans-serif"
+							family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif"
 						}
 					},
 					grid: {
@@ -1856,15 +1871,15 @@ function updateStats(selectedTests) {
 				</span>
 			</h4>
 			<div style="margin-bottom: 10px;">
-				<div class="stat-label">Max Throughput ${isBestMax ? '👑' : ''}</div>
+				<div class="stat-label">Max Throughput ${isBestMax ? '🏆' : ''}</div>
 				<div class="stat-value">${maxRate} Mbps</div>
 			</div>
 			<div style="margin-bottom: 10px;">
-				<div class="stat-label">Average Throughput ${isBestAvg ? '👑' : ''}</div>
+				<div class="stat-label">Average Throughput ${isBestAvg ? '🏆' : ''}</div>
 				<div class="stat-value">${avgRate} Mbps</div>
 			</div>
 			<div>
-				<div class="stat-label">Effective Range (>10 Mbps) ${isBestRange ? '👑' : ''}</div>
+				<div class="stat-label">Effective Range (>10 Mbps) ${isBestRange ? '🏆' : ''}</div>
 				<div class="stat-value">${effectiveRange} dB</div>
 			</div>
 		`;
@@ -1952,7 +1967,7 @@ function updateComparisonTable(selectedTests) {
 			}
 			html += `<td>${deviceName}</td>`;
 			html += `<td>${softwareVersion}</td>`;
-			html += `<td style="color: ${bandColor}; font-weight: 500;">${band}</td>`;
+			html += `<td style="color: ${bandColor}; font-weight: 700;">${band}</td>`;
 			html += `<td>${test.mode || 'Unknown'}</td>`;
 			html += `<td class="${maxRate === bestMaxThroughput ? 'best-value' : ''}">${maxRate} Mbps</td>`;
 			html += `<td>${avgRate} Mbps</td>`;
@@ -2040,6 +2055,10 @@ function showError(message) {
 
 function showSuccess(message) {
 	const success = document.createElement('div');
+	const fontFamily = window.QUALIFI_FONT === 'Berkeley Mono' ?
+		"'Berkeley Mono', 'Courier New', monospace" :
+		"'Poppins', sans-serif";
+
 	success.style.cssText = `
 		position: fixed;
 		top: 20px;
@@ -2049,7 +2068,7 @@ function showSuccess(message) {
 		color: #86efac;
 		padding: 15px;
 		border-radius: 8px;
-		font-family: 'Poppins', sans-serif;
+		font-family: ${fontFamily};
 		font-weight: 400;
 		z-index: 1000;
 		max-width: 400px;

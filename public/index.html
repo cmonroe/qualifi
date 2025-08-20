@@ -4,12 +4,78 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>QualiFi</title>
-	<link rel="preconnect" href="https://fonts.googleapis.com">
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-	<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 	<link rel="stylesheet" href="qualifi.css">
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+	<script>
+		// Dynamic font loading - try Berkeley Mono first, fallback to Poppins
+		(function() {
+			// Function to check if a font is available
+			function checkFont(fontName) {
+				const testString = 'abcdefghijklmnopqrstuvwxyz0123456789';
+				const testSize = '72px';
+				const fallbackFont = 'monospace';
+
+				const canvas = document.createElement('canvas');
+				const context = canvas.getContext('2d');
+
+				context.font = testSize + ' ' + fallbackFont;
+				const fallbackWidth = context.measureText(testString).width;
+
+				context.font = testSize + ' ' + fontName + ', ' + fallbackFont;
+				const testWidth = context.measureText(testString).width;
+
+				return testWidth !== fallbackWidth;
+			}
+
+			// Function to load Poppins from Google Fonts
+			function loadPoppins() {
+				if (!document.querySelector('link[href*="fonts.googleapis.com"]')) {
+					const link = document.createElement('link');
+					link.rel = 'preconnect';
+					link.href = 'https://fonts.googleapis.com';
+					document.head.appendChild(link);
+
+					const link2 = document.createElement('link');
+					link2.rel = 'preconnect';
+					link2.href = 'https://fonts.gstatic.com';
+					link2.crossOrigin = 'anonymous';
+					document.head.appendChild(link2);
+
+					const link3 = document.createElement('link');
+					link3.href = 'https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap';
+					link3.rel = 'stylesheet';
+					document.head.appendChild(link3);
+				}
+			}
+
+			// Store font preference globally
+			window.QUALIFI_FONT = 'Berkeley Mono';
+
+			// Wait for DOM and fonts to load
+			document.addEventListener('DOMContentLoaded', function() {
+				// Give Berkeley Mono a moment to load if it's available
+				setTimeout(function() {
+					if (!checkFont('Berkeley Mono')) {
+						console.log('Berkeley Mono not found, falling back to Poppins');
+						window.QUALIFI_FONT = 'Poppins';
+						loadPoppins();
+
+						// Update CSS custom property for dynamic font switching
+						document.documentElement.style.setProperty('--primary-font', 'Poppins');
+						document.documentElement.style.setProperty('--chart-font', "'Poppins', sans-serif");
+					} else {
+						console.log('Berkeley Mono detected and loaded');
+						document.documentElement.style.setProperty('--primary-font', 'Berkeley Mono');
+						document.documentElement.style.setProperty('--chart-font', "'Berkeley Mono', monospace");
+					}
+
+					// Trigger a custom event that the main JS can listen for
+					window.dispatchEvent(new CustomEvent('fontLoaded', { detail: { font: window.QUALIFI_FONT } }));
+				}, 500);
+			});
+		})();
+	</script>
 </head>
 <body>
 	<header>
