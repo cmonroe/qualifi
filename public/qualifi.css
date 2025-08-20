@@ -468,8 +468,8 @@ main {
 }
 
 .vendor-logo {
-	width: 24px;
-	height: 24px;
+	width: 32px;
+	height: 32px;
 	margin-right: var(--space-sm);
 	object-fit: contain;
 	opacity: 0.8;
@@ -518,8 +518,8 @@ main {
 }
 
 .model-image {
-	width: 32px;
-	height: 24px;
+	width: 40px;
+	height: 32px;
 	margin-right: var(--space-sm);
 	object-fit: contain;
 	opacity: 0.7;
