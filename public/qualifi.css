@@ -683,48 +683,90 @@ main {
 	margin-bottom: var(--space-md);
 }
 
+/* Test Options Container */
 .test-options {
-	background-color: var(--bg-tertiary);
-	border: 1px solid var(--border-subtle);
-	border-radius: 6px;
-	padding: var(--space-md);
+	background-color: transparent;
+	border: none;
+	padding: 0;
+}
+
+/* Device Test Group Container */
+.device-test-group {
+	background-color: var(--bg-secondary);
+	border: 1px solid var(--border-default);
+	border-radius: 8px;
+	margin-bottom: var(--space-lg);
+	overflow: hidden;
+	transition: all var(--transition-fast);
+}
+
+.device-test-group:hover {
+	border-color: var(--border-strong);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .device-group-header {
-	background-color: var(--bg-secondary);
-	padding: var(--space-sm) var(--space-md);
-	border-radius: 4px;
-	margin-bottom: var(--space-md);
+	background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-secondary) 100%);
+	padding: var(--space-md) var(--space-md);
+	border-radius: 8px 8px 0 0;
+	margin-bottom: 0;
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	border: 1px solid var(--border-subtle);
+	border: none;
+	border-bottom: 2px solid var(--accent-primary);
+	position: relative;
+}
+
+.device-group-header::after {
+	content: '';
+	position: absolute;
+	bottom: -2px;
+	left: 0;
+	right: 0;
+	height: 2px;
+	background: linear-gradient(90deg,
+		transparent 0%,
+		var(--accent-primary) 10%,
+		var(--accent-primary) 90%,
+		transparent 100%);
+	opacity: 0.5;
 }
 
 .device-group-title {
-	font-size: 0.9375rem;
-	font-weight: 600;
+	font-size: 1rem;
+	font-weight: 700;
 	color: var(--text-primary);
 	margin-bottom: 4px;
+	letter-spacing: -0.01em;
 }
 
 .device-group-meta {
 	font-size: 0.75rem;
-	color: var(--text-tertiary);
+	color: var(--text-secondary);
+	opacity: 0.8;
 }
 
 .test-config-columns {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
-	gap: var(--space-md);
-	margin-bottom: var(--space-md);
+	gap: var(--space-sm);  /* Changed from 2px to 16px */
+	margin: 0;
+	padding: var(--space-md);
+	background-color: var(--bg-secondary);
 }
 
 .test-column {
-	background-color: var(--bg-secondary);
+	background-color: var(--bg-tertiary);
 	border: 1px solid var(--border-subtle);
-	border-radius: 4px;
+	border-radius: 6px;
 	padding: var(--space-md);
+	transition: all var(--transition-fast);
+}
+
+.test-column:hover {
+	background-color: var(--bg-elevated);
+	border-color: var(--border-default);
 }
 
 .test-column-header {

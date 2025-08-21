@@ -1208,10 +1208,13 @@ function updateTestOptions() {
 
 	// Display tests grouped by device
 	deviceGroups.forEach((deviceGroup, deviceName) => {
+		// Create device test group container
+		const deviceContainer = document.createElement('div');
+		deviceContainer.className = 'device-test-group';
+
 		// Create device header
 		const deviceHeader = document.createElement('div');
 		deviceHeader.className = 'device-group-header';
-		deviceHeader.style.marginTop = testIndex > 0 ? '20px' : '0';
 
 		const model = deviceGroup.deviceInfo?.['Model Number'] || '';
 		const versions = new Set();
@@ -1238,7 +1241,7 @@ function updateTestOptions() {
 				<button class="btn-small" onclick="selectNoneDevice('${escapeQuotes(deviceName)}')">Clear</button>
 			</div>
 		`;
-		container.appendChild(deviceHeader);
+		deviceContainer.appendChild(deviceHeader);
 
 		// Separate TX and RX tests
 		const txTests = deviceGroup.tests.filter(test => test.direction.includes('TX'));
@@ -1253,7 +1256,7 @@ function updateTestOptions() {
 		txColumn.className = 'test-column tx-column';
 		const txHeader = document.createElement('div');
 		txHeader.className = 'test-column-header';
-		txHeader.innerHTML = '📤 DUT-TX Tests';
+		txHeader.innerHTML = '📥 DUT-TX Tests';
 		txColumn.appendChild(txHeader);
 
 		if (txTests.length > 0) {
@@ -1286,11 +1289,15 @@ function updateTestOptions() {
 			rxColumn.appendChild(emptyMsg);
 		}
 
-		// Add columns to container
+		// Add columns to columns container
 		columnsContainer.appendChild(txColumn);
 		columnsContainer.appendChild(rxColumn);
 
-		container.appendChild(columnsContainer);
+		// Add columns container to device container
+		deviceContainer.appendChild(columnsContainer);
+
+		// Add device container to main container
+		container.appendChild(deviceContainer);
 	});
 }
 
@@ -1653,7 +1660,7 @@ function drawChart(selectedTests) {
 			plugins: {
 				title: {
 					display: true,
-					text: 'WiFi Rate vs Range Comparison',
+					text: 'WiFi Rate vs Range',
 					color: '#e0e0e0',
 					font: {
 						size: 18,
@@ -1663,7 +1670,7 @@ function drawChart(selectedTests) {
 				},
 				subtitle: {
 					display: true,
-					text: `Comparing ${uniqueConfigs.size} test configuration(s) across ${Array.from(new Set(selectedTests.map(t => t.deviceInfo?.Name || t.fileName))).length} device(s) | Solid: TX, Dotted: RX | Hover for PHY details at each attenuation`,
+					text: `Comparing ${uniqueConfigs.size} test configuration(s) across ${Array.from(new Set(selectedTests.map(t => t.deviceInfo?.Name || t.fileName))).length} device(s) | Solid: TX, Dotted: RX`,
 					color: '#aaa',
 					font: {
 						size: 14,
@@ -1674,7 +1681,7 @@ function drawChart(selectedTests) {
 					display: true,
 					position: 'top',
 					title: {
-						display: true,
+						display: false,
 						text: 'Legend shows baseline (0dB) configuration - hover points for actual PHY parameters',
 						color: '#888',
 						font: {
