@@ -1774,7 +1774,7 @@ function drawChart(selectedTests) {
 									}
 
 									if (degradations.length > 0) {
-										lines.push(` ⚠️ Degraded: ${degradations.join(', ')}`);
+										lines.push(`⚠️ Degraded: ${degradations.join(', ')}`);
 									}
 								}
 
