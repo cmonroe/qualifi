@@ -4,40 +4,58 @@
 
 ## Overview
 
-QualiFi is a web-based WiFi Rate vs Range (RvR) analysis tool for SDG testing. It provides a modern interface for visualizing and comparing WiFi performance data across different devices, software versions, and test configurations.
+QualiFi is a web-based WiFi Rate vs Range (RvR) analysis tool for SDG testing. It provides a modern dark-themed interface for visualizing and comparing WiFi performance data across different devices, software versions, and test configurations. The tool supports 2.4GHz, 5GHz, and 6GHz bands with comprehensive TX/RX analysis capabilities.
+
+## Key Features
+
+- **Multi-Band Support**: 2.4GHz (2G), 5GHz (5G), and 6GHz (6G) WiFi bands
+- **TX/RX Specific Analysis**: Separate columns and parameters for DUT-TX and DUT-RX tests
+- **Dual Report Formats**: Supports both Excel (.xlsx) and PDF report downloads
+- **Modern UI**: Dark theme with Berkeley Mono font (falls back to Poppins)
+- **Batch Loading**: Load multiple test configurations from server simultaneously
+- **Interactive Visualization**: Line/bar charts with detailed hover tooltips showing PHY degradation
+- **Smart Filtering**: Automatically filters invalid data points (channel=0 or throughput=0)
 
 ## Tool Components
 
-1. **Web Interface** (`public/index.html`) - The main user interface
+1. **Web Interface** (`public/index.html`) - Modern dark-themed user interface
 2. **Node.js Server** (`server.js`) - Serves reports and provides API endpoints
-3. **Template Creator** (`tools/template.py`) - Generates sample Excel reports
-4. **Excel Reports** - LANforge test data in hierarchical directory structure
+3. **Styling** (`public/qualifi.css`) - Technical precision dark theme
+4. **Client Logic** (`public/qualifi.js`) - Interactive visualization and analysis
+5. **Excel/PDF Reports** - LANforge test data in hierarchical directory structure
 
 ## Directory Structure
 
-The server uses a hierarchical report storage system with test configuration folders. Each test configuration folder contains exactly one file named `report.xlsx`:
+The server uses a hierarchical report storage system with test configuration folders. Each test configuration folder contains:
+- **report.xlsx** - Required Excel test data file
+- **Rate-vs-Range-Report*.pdf** - Optional PDF report (wildcard matching supported)
 
 ```
 reports/
 ├── [Vendor Name]/
-│   ├── logo.png             (optional vendor logo)
+│   ├── logo.png             (optional vendor logo - 64x64px)
 │   ├── [Model Name]/
-│   │   ├── device.png        (optional device image)
+│   │   ├── device.png        (optional device image - 128x96px)
 │   │   ├── [Software Version]/
 │   │   │   ├── [Test Config 1]/
-│   │   │   │   └── report.xlsx
+│   │   │   │   ├── report.xlsx
+│   │   │   │   └── Rate-vs-Range-Report-[details].pdf (optional)
 │   │   │   ├── [Test Config 2]/
-│   │   │   │   └── report.xlsx
+│   │   │   │   ├── report.xlsx
+│   │   │   │   └── Rate-vs-Range-Report-[details].pdf (optional)
 │   │   │   └── [Test Config N]/
-│   │   │       └── report.xlsx
+│   │   │       ├── report.xlsx
+│   │   │       └── Rate-vs-Range-Report-[details].pdf (optional)
 │   │   └── [Another Version]/
 │   │       └── [Test Config]/
-│   │           └── report.xlsx
+│   │           ├── report.xlsx
+│   │           └── Rate-vs-Range-Report-[details].pdf (optional)
 │   └── [Another Model]/
 │       ├── device.png        (optional device image)
 │       └── [Software Version]/
 │           └── [Test Config]/
-│               └── report.xlsx
+│               ├── report.xlsx
+│               └── Rate-vs-Range-Report-[details].pdf (optional)
 └── [Another Vendor]/
     ├── logo.png             (optional vendor logo)
     └── ...
@@ -48,24 +66,22 @@ reports/
 ```
 reports/
 ├── Adtran/
-│   ├── logo.png             (Adtran company logo - 64x64px recommended)
+│   ├── logo.png
 │   ├── SDG-8612/
-│   │   ├── device.png        (SDG-8612 device photo - 128x96px recommended)
-│   │   ├── 25.6.3.1/
+│   │   ├── device.png
+│   │   ├── 25.6.4.1/
 │   │   │   ├── 5g_2x2_ch44/
-│   │   │   │   └── report.xlsx
+│   │   │   │   ├── report.xlsx
+│   │   │   │   └── Rate-vs-Range-Report-5g-2x2-ch44.pdf
 │   │   │   ├── 5g_2x2_ch149/
-│   │   │   │   └── report.xlsx
-│   │   │   └── 2g_2x2_ch6/
-│   │   │       └── report.xlsx
-│   │   └── 25.6.4.0/
-│   │       └── 5g_2x2_ch44/
+│   │   │   │   ├── report.xlsx
+│   │   │   │   └── Rate-vs-Range-Report-5g-2x2-ch149.pdf
+│   │   │   └── 6g_2x2_ch37/
+│   │   │       ├── report.xlsx
+│   │   │       └── Rate-vs-Range-Report-6g-2x2-ch37.pdf
+│   │   └── 25.9.1.1/
+│   │       └── 5g_4x4_ch44/
 │   │           └── report.xlsx
-│   └── SDG-8622/
-│       ├── device.png
-│       └── 3.1.0/
-│           └── 5g_4x4_ch44/
-│               └── report.xlsx
 ├── Eero/
 │   ├── logo.png
 │   └── Max7/
@@ -96,19 +112,17 @@ Test configuration folder names should be descriptive and follow a consistent pa
 - **5g_4x4_ch149** - 5GHz, 4x4 MIMO, Channel 149
 - **2g_2x2_ch6** - 2.4GHz, 2x2 MIMO, Channel 6
 - **6g_2x2_ch37** - 6GHz, 2x2 MIMO, Channel 37
+- **6g_4x4_ch1** - 6GHz, 4x4 MIMO, Channel 1 (displayed as CH1 in UI)
 - **5g_2x2_ch44_80mhz** - 5GHz, 2x2 MIMO, Channel 44, 80MHz bandwidth
 - **5g_4x4_ch149_wpa3** - 5GHz, 4x4 MIMO, Channel 149, WPA3 security
 
 ### Band Identifiers:
-- **2g** - 2.4GHz
-- **5g** - 5GHz
-- **6g** - 6GHz
+- **2g** - 2.4GHz (2412-2484 MHz)
+- **5g** - 5GHz (5160-5885 MHz)
+- **6g** - 6GHz (5925-7125 MHz)
 
-### Spatial Stream Format:
-- **1x1** - 1 spatial stream (SISO)
-- **2x2** - 2 spatial streams
-- **4x4** - 4 spatial streams
-- **8x8** - 8 spatial streams
+### 6GHz Channel Note:
+6GHz channels are automatically converted for display (e.g., channel 191 → CH1)
 
 ## Quick Start
 
@@ -119,11 +133,14 @@ Ensure Node.js is installed on your system. Download from [nodejs.org](https://n
 
 ```bash
 # Clone project
-git clone git@bitbucket.org:smartrg-openwrt/qualifi.git
+git clone git@github.com:cmonroe/qualifi.git
 cd qualifi
 
 # Create reports directory
 mkdir reports
+
+# Optional: Add logo image
+cp logo.png public/logo.png
 ```
 
 ### 3. Start the Server
@@ -136,52 +153,67 @@ The server will start on http://localhost:3000
 
 ### 4. Add Test Reports
 
-Use the provided Python script to create sample reports:
-
-```bash
-# Create sample reports for a device
-python tools/template.py
-
-# Create multiple test configurations
-python tools/template.py --multiple
-
-# Create comparison example with multiple devices
-python tools/template.py --comparison
-
-# Create custom template
-python tools/template.py --custom Adtran SDG-8612 25.6.3.1 5g_2x2_ch44
-```
+Place your Excel test reports and optional PDF reports in the hierarchical directory structure as shown above.
 
 ## Web Interface Features
 
 ### 1. Server Reports Tab
 - **Hierarchical Browser**: Navigate vendors → models → versions
-- **Version Selection**: Select entire versions (all test configs included)
-- **Visual Elements**: Vendor logos and device images displayed
-- **Search**: Find reports by vendor, model, version, or test config
+- **Version-Level Selection**: Select entire versions (all test configs included automatically)
+- **Visual Elements**: Vendor logos and device images with automatic fallback
+- **Search**: Real-time search across vendors, models, versions, and test configs
 - **Quick Filters**:
-  - Expand/Collapse All
-  - Select Latest Versions (automatically selects newest version of each model)
+  - Expand/Collapse All navigation
+  - Select Latest Versions (auto-selects newest version per model)
+  - Batch loading with progress notifications
 
 ### 2. Local Files Tab
-- **Drag & Drop**: Upload Excel files directly
-- **Multiple Files**: Load multiple reports for comparison
-- **File Management**: Clear server files, local files, or all
+- **Drag & Drop**: Upload Excel files directly from your computer
+- **Multiple Files**: Load and compare multiple local reports
+- **File Management**:
+  - Clear server files only
+  - Clear local files only
+  - Clear all loaded files
+  - Clear by device model
 
 ### 3. Test Configuration Selection
-After loading reports, you can:
-- View test configurations grouped by device
-- See tests organized in TX/RX columns
-- Select specific tests to compare
-- View test details (Band, Channel, Bandwidth, NSS, Mode, Version)
+After loading reports:
+- **Device Grouping**: Tests organized by device with metadata display
+- **TX/RX Columns**: Separate columns for DUT-TX and DUT-RX tests
+- **Smart Selection**:
+  - Select All/Clear All
+  - Select by device
+  - Select Matching (finds common configs across devices)
+- **Download Links**: Direct Excel and PDF download icons for server files
+- **Test Details**: Band, Channel, BW, NSS, Mode, Version display
 
 ### 4. Visualization & Analysis
-- **Interactive Charts**: Line or bar charts with zoom capability
-- **Performance Statistics**: Max/Average throughput, effective range
-- **Device Comparison**: Side-by-side comparison table
-- **Export Options**: 
-  - Export chart as PNG
-  - Export comparison data as CSV
+- **Interactive Charts**:
+  - Line or bar chart toggle
+  - Zoom and pan capabilities
+  - Solid lines for TX, dotted for RX
+  - Unique colors per device/configuration
+- **Advanced Tooltips**:
+  - PHY parameters at each attenuation point
+  - Degradation indicators (NSS, BW, Mode changes)
+  - TX/RX specific parameter display
+- **Performance Statistics**:
+  - Max throughput with trophy indicators
+  - Average throughput calculations
+  - Effective range (>10 Mbps threshold)
+- **Device Comparison**:
+  - Side-by-side comparison table
+  - Best value highlighting
+  - Configuration grouping
+- **Export Options**:
+  - Chart export as PNG
+  - Full comparison data as CSV
+
+### 5. UI Features
+- **Typography**: Berkeley Mono font with Poppins fallback
+- **Dark Theme**: Technical precision design with high contrast
+- **Notifications**: Success/error notifications with stacking support
+- **Responsive**: Adapts to different screen sizes
 
 ## Excel Report Format
 
@@ -200,12 +232,20 @@ Reports must be Excel files (.xlsx) containing:
 - **BW** - Bandwidth in MHz
 - **NSS** - Number of spatial streams
 - **Security** - Security protocol (e.g., WPA3)
-- **Tx Mode** - Transmission mode (e.g., HE, OFDM)
+- **Mode** - PHY mode (e.g., HE, VHT, HT, OFDM)
+
+### Optional TX/RX Specific Columns:
+For more precise analysis, include direction-specific columns:
+- **TX Mode**, **TX BW**, **TX NSS** - Used for DUT-TX tests
+- **RX Mode**, **RX BW**, **RX NSS** - Used for DUT-RX tests
+
+The tool automatically uses direction-specific columns when available, falling back to standard columns if not present.
 
 ### Data Validation:
 - Invalid data points (channel=0 or throughput=0) are automatically filtered
-- The tool determines band (2G/5G/6G) from frequency
-- Tests are grouped by configuration parameters
+- Band (2G/5G/6G) determined from frequency
+- Tests grouped by baseline configuration (attenuation 0 or lowest)
+- 6GHz channels converted for display (191+ → 1+)
 
 ## API Endpoints
 
@@ -221,11 +261,11 @@ Returns the complete hierarchical structure of all reports.
         "SDG-8612": {
           "image": "Adtran/SDG-8612/device.png",
           "versions": {
-            "25.6.3.1": {
+            "25.6.4.1": {
               "testConfigs": {
                 "5g_2x2_ch44": {
                   "name": "report.xlsx",
-                  "path": "Adtran/SDG-8612/25.6.3.1/5g_2x2_ch44/report.xlsx",
+                  "path": "Adtran/SDG-8612/25.6.4.1/5g_2x2_ch44/report.xlsx",
                   "size": 45678,
                   "modified": "2025-01-15T10:30:00.000Z"
                 }
@@ -242,57 +282,26 @@ Returns the complete hierarchical structure of all reports.
 ### GET /api/search?q=searchterm
 Search for reports matching the query across all hierarchy levels.
 
+### GET /api/pdf/[path]
+Finds and serves PDF report files using wildcard matching.
+- Searches for files matching pattern: `rate-vs-range-report*.pdf`
+- Case-insensitive matching
+- Returns first matching PDF in the directory
+
 ### GET /reports/[path]
 Download report files or retrieve images:
 - Excel reports: `/reports/vendor/model/version/testconfig/report.xlsx`
 - Images: `/reports/vendor/logo.png` or `/reports/vendor/model/device.png`
 
-## Setting Up Reports
+## PDF Report Support
 
-### Manual Setup
-
-```bash
-# Create vendor directory
-mkdir -p reports/Adtran
-
-# Add vendor logo (optional)
-cp company_logo.png reports/Adtran/logo.png
-
-# Create model directory
-mkdir -p reports/Adtran/SDG-8612
-
-# Add device image (optional)
-cp device_photo.png reports/Adtran/SDG-8612/device.png
-
-# Create version and test config directories
-mkdir -p reports/Adtran/SDG-8612/25.6.3.1/5g_2x2_ch44
-
-# Copy test report
-cp test_data.xlsx reports/Adtran/SDG-8612/25.6.3.1/5g_2x2_ch44/report.xlsx
-```
-
-### Batch Setup Script
-
-```bash
-#!/bin/bash
-# setup_reports.sh
-
-VENDOR="Adtran"
-MODEL="SDG-8612"
-VERSION="25.6.3.1"
-
-# Test configurations to set up
-CONFIGS="5g_2x2_ch44 5g_2x2_ch149 2g_2x2_ch6"
-
-for CONFIG in $CONFIGS; do
-    DIR="reports/$VENDOR/$MODEL/$VERSION/$CONFIG"
-    mkdir -p "$DIR"
-    
-    # Copy your test file to the standard name
-    cp "test_${CONFIG}.xlsx" "$DIR/report.xlsx"
-    echo "Created: $DIR/report.xlsx"
-done
-```
+The tool automatically detects PDF reports in test configuration directories:
+- **Naming Pattern**: `Rate-vs-Range-Report*.pdf` (case-insensitive)
+- **Wildcard Support**: Any suffix after the base name is accepted
+- **Examples**:
+  - `Rate-vs-Range-Report-5g-2x2-ch44.pdf`
+  - `rate-vs-range-report_2025_01_15.pdf`
+  - `Rate-VS-Range-Report-FINAL.pdf`
 
 ## Image Guidelines
 
@@ -306,16 +315,19 @@ done
 - **Format**: PNG or JPG
 - **Location**: `reports/[Vendor]/[Model]/device.png`
 
-Images are optional but enhance the visual experience when browsing reports.
+Images are optional but enhance the visual experience. Missing images are handled gracefully with automatic hiding.
 
 ## Best Practices
 
-1. **Consistent Naming**: Use standardized names across all reports
+1. **Consistent Naming**: Use standardized folder and file names
 2. **Version Control**: Keep original test files separately as backup
-3. **Test Organization**: Group similar tests logically
+3. **Test Organization**: Group related tests logically by configuration
 4. **Data Quality**: Ensure Excel files have all required columns
-5. **Regular Updates**: Keep software versions current
-6. **Documentation**: Document any custom test configurations
+5. **TX/RX Columns**: Include direction-specific columns for accurate analysis
+6. **Regular Updates**: Keep software versions current
+7. **PDF Reports**: Include PDF versions for complete documentation
+8. **Image Assets**: Add logos and device images for better visual navigation
+9. **6GHz Testing**: Use proper channel numbers (raw values will be converted)
 
 ## Troubleshooting
 
@@ -323,49 +335,20 @@ Images are optional but enhance the visual experience when browsing reports.
 - Verify file is named exactly `report.xlsx`
 - Check directory structure (5 levels: vendor/model/version/testconfig/report.xlsx)
 - Ensure proper read permissions
+- Check server console for error messages
 
 ### Missing Data
-- Check Excel file has required sheets and columns
-- Verify column headers match expected names (case-insensitive, partial match)
-- Look for console errors in browser developer tools
+- Verify Excel has required sheets: "Device Under Test Information" and "Rate vs Range"
+- Check column headers (case-insensitive, partial matching supported)
+- Look for filtered data notifications (channel=0 or throughput=0)
+- Review browser console (F12) for detailed errors
 
-### Performance Issues
-- Limit number of simultaneous comparisons
-- Consider data point density in reports
-- Check server console for errors
+### PDF Downloads Not Working
+- Ensure PDF follows naming pattern: `Rate-vs-Range-Report*.pdf`
+- Check file exists in same directory as report.xlsx
+- Verify read permissions on PDF file
 
-### Validation Script
-
-```bash
-#!/bin/bash
-# validate_reports.sh
-
-echo "Validating report structure..."
-
-# Check for report files
-find reports -name "report.xlsx" | while read -r file; do
-    echo "✓ Found: $file"
-done
-
-# Check for images
-echo -e "\nChecking for images..."
-find reports -name "logo.png" -o -name "device.png" | while read -r img; do
-    echo "✓ Image: $img"
-done
-
-# Count statistics
-echo -e "\nStatistics:"
-echo "Vendors: $(find reports -maxdepth 1 -type d | tail -n +2 | wc -l)"
-echo "Reports: $(find reports -name "report.xlsx" | wc -l)"
-echo "Images: $(find reports \( -name "logo.png" -o -name "device.png" \) | wc -l)"
-```
-
-## Support
-
-For issues or questions:
-1. Check the browser console for errors (F12)
-2. Review server console output
-3. Validate directory structure and file formats
-4. Ensure all dependencies are installed
-
-The tool provides comprehensive WiFi performance analysis with an intuitive interface for comparing multiple devices and test configurations.
+### Font Display Issues
+- Berkeley Mono loads if available, falls back to Poppins
+- Google Fonts loads automatically for Poppins fallback
+- Check browser console for font loading messages
