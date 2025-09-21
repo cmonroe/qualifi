@@ -1791,6 +1791,16 @@ function drawChart(selectedTests) {
 							}
 							return '';
 						},
+						labelColor: function(context) {
+							const dataset = context.dataset;
+							return {
+								borderColor: dataset.borderColor,
+								backgroundColor: dataset.backgroundColor,
+								borderWidth: 2,
+								borderDash: dataset.borderDash || [], // Use the same dash pattern as the line
+								borderDashOffset: 0
+							};
+						},
 						label: function(context) {
 							const dataset = context.dataset;
 							const deviceName = dataset.deviceName;
