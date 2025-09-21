@@ -843,22 +843,31 @@ function extractRvRData(workbook) {
 				const direction = row[directionIndex] || 'Unknown';
 
 				// Use direction-specific columns when available, otherwise use regular columns
+				// IMPORTANT: Column names are from test equipment perspective!
+				// DUT-TX = test equipment receives = use Rx columns
+				// DUT-RX = test equipment transmits = use Tx columns
 				let bandwidth, nss, mode;
 				const isTxDirection = direction.includes('TX');
 				const isRxDirection = direction.includes('RX');
-				const hasTxColumns = (txBwIndex !== -1 || txNssIndex !== -1 || txModeIndex !== -1);
-				const hasRxColumns = (rxBwIndex !== -1 || rxNssIndex !== -1 || rxModeIndex !== -1);
 
-				if (isTxDirection && hasTxColumns) {
-					// Use TX columns when available, fall back to regular columns
-					bandwidth = (txBwIndex !== -1 ? row[txBwIndex] : row[bwIndex]) || 'Unknown';
-					nss = (txNssIndex !== -1 ? row[txNssIndex] : row[nssIndex]) || 'Unknown';
-					mode = (txModeIndex !== -1 ? row[txModeIndex] : row[modeIndex]) || 'Unknown';
-				} else if (isRxDirection && hasRxColumns) {
-					// Use RX columns when available, fall back to regular columns
-					bandwidth = (rxBwIndex !== -1 ? row[rxBwIndex] : row[bwIndex]) || 'Unknown';
-					nss = (rxNssIndex !== -1 ? row[rxNssIndex] : row[nssIndex]) || 'Unknown';
-					mode = (rxModeIndex !== -1 ? row[rxModeIndex] : row[modeIndex]) || 'Unknown';
+				// Check if specific columns exist
+				const hasTxNss = txNssIndex !== -1;
+				const hasRxNss = rxNssIndex !== -1;
+				const hasTxBw = txBwIndex !== -1;
+				const hasRxBw = rxBwIndex !== -1;
+				const hasTxMode = txModeIndex !== -1;
+				const hasRxMode = rxModeIndex !== -1;
+
+				if (isTxDirection) {
+					// For DUT-TX direction, use RX columns (test equipment perspective)
+					bandwidth = hasRxBw ? row[rxBwIndex] : row[bwIndex] || 'Unknown';
+					nss = hasRxNss ? row[rxNssIndex] : row[nssIndex] || 'Unknown';
+					mode = hasRxMode ? row[rxModeIndex] : row[modeIndex] || 'Unknown';
+				} else if (isRxDirection) {
+					// For DUT-RX direction, use TX columns (test equipment perspective)
+					bandwidth = hasTxBw ? row[txBwIndex] : row[bwIndex] || 'Unknown';
+					nss = hasTxNss ? row[txNssIndex] : row[nssIndex] || 'Unknown';
+					mode = hasTxMode ? row[txModeIndex] : row[modeIndex] || 'Unknown';
 				} else {
 					// Use regular columns as fallback
 					bandwidth = row[bwIndex] || 'Unknown';
@@ -1584,16 +1593,17 @@ function drawChart(selectedTests) {
 		'#003049', '#d62828', '#f77f00', '#fcbf49', '#eae2b7', '#ffffff'
 	];
 
-	// Create a map to assign unique colors to each device + test configuration combination
+	// Create a map to assign unique colors to each device + software version + test configuration combination
 	const configColorMap = new Map();
 	let colorIndex = 0;
 
-	// First pass: identify unique device + test configuration combinations
+	// First pass: identify unique device + test configuration + software version combinations
 	const uniqueConfigs = new Set();
 	selectedTests.forEach(test => {
 		const deviceName = test.deviceInfo?.Name || test.fileName;
+		const softwareVersion = test.deviceInfo?.['Software Version'] || '';
 		const testConfig = formatTestName(test);
-		const configKey = `${deviceName}|${testConfig}`;
+		const configKey = `${deviceName}|${softwareVersion}|${testConfig}`;
 		uniqueConfigs.add(configKey);
 	});
 
@@ -1603,12 +1613,76 @@ function drawChart(selectedTests) {
 		colorIndex++;
 	});
 
+	// Create point style assignment for DUT models with multiple tests
+	const pointStyles = ['circle', 'triangle', 'rect', 'star', 'cross', 'crossRot', 'dash', 'line', 'rectRounded', 'rectRot'];
+	const modelStyleMap = new Map();
+	let styleIndex = 0;
+
+	// Group tests by DUT model to assign point styles
+	const modelGroups = new Map();
+	selectedTests.forEach(test => {
+		const deviceName = test.deviceInfo?.Name || test.fileName;
+		const modelNumber = test.deviceInfo?.['Model Number'] || '';
+		const modelKey = `${deviceName}|${modelNumber}`;
+
+		if (!modelGroups.has(modelKey)) {
+			modelGroups.set(modelKey, []);
+		}
+		modelGroups.get(modelKey).push(test);
+	});
+
+	// Assign point styles to models that have multiple tests
+	// Group by TX/RX pairs to ensure synchronized point styles
+	modelGroups.forEach((tests, modelKey) => {
+		if (tests.length > 1) {
+			// Group tests by configuration (excluding direction) to pair TX/RX
+			const configGroups = new Map();
+			tests.forEach(test => {
+				const softwareVersion = test.deviceInfo?.['Software Version'] || '';
+				const testConfig = formatTestName(test);
+				const configKey = `${softwareVersion}|${testConfig}`;
+
+				if (!configGroups.has(configKey)) {
+					configGroups.set(configKey, []);
+				}
+				configGroups.get(configKey).push(test);
+			});
+
+			// Assign the same point style to TX/RX pairs
+			let configIndex = 0;
+			configGroups.forEach((configTests, configKey) => {
+				const pointStyle = pointStyles[configIndex % pointStyles.length];
+
+				// Apply the same point style to all tests in this configuration (TX and RX)
+				configTests.forEach(test => {
+					const softwareVersion = test.deviceInfo?.['Software Version'] || '';
+					const testKey = `${modelKey}|${softwareVersion}|${formatTestName(test)}|${test.direction}`;
+					modelStyleMap.set(testKey, pointStyle);
+				});
+
+				configIndex++;
+			});
+		} else {
+			// Single test for this model gets default circle style
+			const test = tests[0];
+			const softwareVersion = test.deviceInfo?.['Software Version'] || '';
+			const testKey = `${modelKey}|${softwareVersion}|${formatTestName(test)}|${test.direction}`;
+			modelStyleMap.set(testKey, 'circle');
+		}
+	});
+
 	const datasets = selectedTests.map((test, index) => {
 		const deviceName = test.deviceInfo?.Name || test.fileName;
 		const softwareVersion = test.deviceInfo?.['Software Version'] || '';
+		const modelNumber = test.deviceInfo?.['Model Number'] || '';
 		const testConfig = formatTestName(test);
-		const configKey = `${deviceName}|${testConfig}`;
+		const configKey = `${deviceName}|${softwareVersion}|${testConfig}`;
 		const baseColor = configColorMap.get(configKey);
+
+		// Get point style for this test
+		const modelKey = `${deviceName}|${modelNumber}`;
+		const testKey = `${modelKey}|${softwareVersion}|${testConfig}|${test.direction}`;
+		const pointStyle = modelStyleMap.get(testKey) || 'circle';
 
 		// Create detailed label based on attenuation 0 data (or first available)
 		const label = `${deviceName} ${softwareVersion ? `v${softwareVersion}` : ''} - ${testConfig} ${test.direction}`;
@@ -1634,6 +1708,7 @@ function drawChart(selectedTests) {
 			borderWidth: 2.5,
 			pointRadius: 4,
 			pointHoverRadius: 6,
+			pointStyle: pointStyle,
 			tension: 0.2,
 			// Line style based on direction
 			borderDash: borderDash,
@@ -1670,7 +1745,7 @@ function drawChart(selectedTests) {
 				},
 				subtitle: {
 					display: true,
-					text: `Comparing ${uniqueConfigs.size} test configuration(s) across ${Array.from(new Set(selectedTests.map(t => t.deviceInfo?.Name || t.fileName))).length} device(s) | Solid: TX, Dotted: RX`,
+					text: `Comparing ${uniqueConfigs.size} test configuration(s) across ${Array.from(new Set(selectedTests.map(t => t.deviceInfo?.Name || t.fileName))).length} device(s) | Solid: TX, Dotted: RX | Different point styles for multiple tests per DUT model`,
 					color: '#aaa',
 					font: {
 						size: 14,
