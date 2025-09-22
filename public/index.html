@@ -106,10 +106,10 @@
 		<div class="container">
 			<div class="control-panel">
 				<div class="source-tabs">
-					<button class="tab-button active" onclick="switchTab('server')">
+					<button class="tab-button active" onclick="switch_tab('server')">
 						<span class="tab-icon">⬇</span> Server Reports
 					</button>
-					<button class="tab-button" onclick="switchTab('local')">
+					<button class="tab-button" onclick="switch_tab('local')">
 						<span class="tab-icon">📁</span> Local Files
 					</button>
 				</div>
@@ -117,15 +117,15 @@
 				<div class="tab-content" id="serverTab">
 					<div class="search-bar">
 						<input type="text" id="reportSearch" placeholder="Search vendors, models, or versions..."
-							   oninput="searchReports(this.value)">
-						<button class="btn-small" onclick="refreshReports()">↻ Refresh</button>
+							   oninput="search_reports(this.value)">
+						<button class="btn-small" onclick="refresh_reports()">↻ Refresh</button>
 					</div>
 
 					<div class="quick-filters">
 						<span>Quick actions:</span>
-						<button class="btn-small" onclick="expandAllVendors()">Expand All</button>
-						<button class="btn-small" onclick="collapseAllVendors()">Collapse All</button>
-						<button class="btn-small" onclick="selectLatestVersions()">Select Latest</button>
+						<button class="btn-small" onclick="expand_all_vendors()">Expand All</button>
+						<button class="btn-small" onclick="collapse_all_vendors()">Collapse All</button>
+						<button class="btn-small" onclick="select_latest_versions()">Select Latest</button>
 					</div>
 
 					<div class="report-browser" id="reportBrowser">
@@ -135,7 +135,7 @@
 					<div class="selected-reports" id="selectedReports" style="display: none;">
 						<h4 style="margin: 24px 0 16px 0;">Selected Reports:</h4>
 						<div id="selectedReportsList"></div>
-						<button class="chart-button" style="margin-top: 16px;" onclick="loadSelectedReports()">
+						<button class="chart-button" style="margin-top: 16px;" onclick="load_selected_reports()">
 							Load Selected Reports
 						</button>
 					</div>
@@ -160,8 +160,8 @@
 							<span id="fileCount">0 files from 0 devices</span>
 						</h4>
 						<div style="display: flex; gap: 8px;">
-							<button class="btn-small" onclick="clearServerFiles()">Clear Server</button>
-							<button class="btn-small" onclick="clearLocalFiles()">Clear Local</button>
+							<button class="btn-small" onclick="clear_server_files()">Clear Server</button>
+							<button class="btn-small" onclick="clear_local_files()">Clear Local</button>
 							<button class="btn-small btn-remove" onclick="clearAllFiles()">Clear All</button>
 						</div>
 					</div>
@@ -183,11 +183,11 @@
 				<div class="chart-controls">
 					<div class="chart-controls-left">
 						<button class="chart-button" onclick="toggleChartType()">Toggle Chart Type</button>
-						<button class="chart-button" onclick="exportChart()">Export Chart</button>
-						<button class="chart-button" onclick="exportCSV()">Export CSV Data</button>
+						<button class="chart-button" onclick="export_chart()">Export Chart</button>
+						<button class="chart-button" onclick="export_csv()">Export CSV Data</button>
 					</div>
 					<div class="chart-controls-right">
-						<button class="chart-button chart-button-clear" onclick="clearChartSelection()">Clear Selection</button>
+						<button class="chart-button chart-button-clear" onclick="clear_chart_selection()">Clear Selection</button>
 					</div>
 				</div>
 				<div class="chart-wrapper">

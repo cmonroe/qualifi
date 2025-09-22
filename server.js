@@ -8,7 +8,7 @@ const REPORTS_DIR = './reports'; // Hierarchical report storage: vendor/model/ve
 const PUBLIC_DIR = './public'; // Directory containing the HTML file
 
 // MIME types
-const mimeTypes = {
+const mime_types = {
 	'.html': 'text/html',
 	'.css': 'text/css',
 	'.js': 'text/javascript',
@@ -23,9 +23,9 @@ const mimeTypes = {
 };
 
 // Helper function to check if image file exists
-function checkImageFile(filePath) {
+function check_image_file(file_path) {
 	try {
-		const stats = fs.statSync(filePath);
+		const stats = fs.statSync(file_path);
 		return stats.isFile();
 	} catch (err) {
 		return false;
@@ -33,7 +33,7 @@ function checkImageFile(filePath) {
 }
 
 // Helper function to recursively scan directory structure with image support and test config folders
-function scanReportsDirectory(dir, baseDir = dir) {
+function scan_reports_directory(dir, base_dir = dir) {
 	const structure = {
 		vendors: {}
 	};
@@ -41,74 +41,74 @@ function scanReportsDirectory(dir, baseDir = dir) {
 	try {
 		// Scan for vendors
 		const vendors = fs.readdirSync(dir).filter(item => {
-			const itemPath = path.join(dir, item);
-			return fs.statSync(itemPath).isDirectory() && !item.startsWith('.');
+			const item_path = path.join(dir, item);
+			return fs.statSync(item_path).isDirectory() && !item.startsWith('.');
 		});
 
 		vendors.forEach(vendor => {
 			structure.vendors[vendor] = { models: {} };
-			const vendorPath = path.join(dir, vendor);
+			const vendor_path = path.join(dir, vendor);
 
 			// Check for vendor logo
-			const logoPath = path.join(vendorPath, 'logo.png');
-			const hasLogo = checkImageFile(logoPath);
-			if (hasLogo) {
-				const relativePath = path.relative(baseDir, logoPath).replace(/\\/g, '/');
-				structure.vendors[vendor].logo = relativePath;
+			const logo_path = path.join(vendor_path, 'logo.png');
+			const has_logo = check_image_file(logo_path);
+			if (has_logo) {
+				const relative_path = path.relative(base_dir, logo_path).replace(/\\/g, '/');
+				structure.vendors[vendor].logo = relative_path;
 			}
 
 			// Scan for models
-			const models = fs.readdirSync(vendorPath).filter(item => {
-				const itemPath = path.join(vendorPath, item);
-				return fs.statSync(itemPath).isDirectory() && !item.startsWith('.');
+			const models = fs.readdirSync(vendor_path).filter(item => {
+				const item_path = path.join(vendor_path, item);
+				return fs.statSync(item_path).isDirectory() && !item.startsWith('.');
 			});
 
 			models.forEach(model => {
 				structure.vendors[vendor].models[model] = { versions: {} };
-				const modelPath = path.join(vendorPath, model);
+				const model_path = path.join(vendor_path, model);
 
 				// Check for model image
-				const modelImagePath = path.join(modelPath, 'device.png');
-				const hasModelImage = checkImageFile(modelImagePath);
-				if (hasModelImage) {
-					const relativePath = path.relative(baseDir, modelImagePath).replace(/\\/g, '/');
-					structure.vendors[vendor].models[model].image = relativePath;
+				const model_image_path = path.join(model_path, 'device.png');
+				const has_model_image = check_image_file(model_image_path);
+				if (has_model_image) {
+					const relative_path = path.relative(base_dir, model_image_path).replace(/\\/g, '/');
+					structure.vendors[vendor].models[model].image = relative_path;
 				}
 
 				// Scan for versions
-				const versions = fs.readdirSync(modelPath).filter(item => {
-					const itemPath = path.join(modelPath, item);
-					return fs.statSync(itemPath).isDirectory() && !item.startsWith('.');
+				const versions = fs.readdirSync(model_path).filter(item => {
+					const item_path = path.join(model_path, item);
+					return fs.statSync(item_path).isDirectory() && !item.startsWith('.');
 				});
 
 				versions.forEach(version => {
-					structure.vendors[vendor].models[model].versions[version] = { testConfigs: {} };
-					const versionPath = path.join(modelPath, version);
+					structure.vendors[vendor].models[model].versions[version] = { test_configs: {} };
+					const version_path = path.join(model_path, version);
 
 					// Scan for test configuration directories
-					const testConfigs = fs.readdirSync(versionPath).filter(item => {
-						const itemPath = path.join(versionPath, item);
-						return fs.statSync(itemPath).isDirectory() && !item.startsWith('.');
+					const test_configs = fs.readdirSync(version_path).filter(item => {
+						const item_path = path.join(version_path, item);
+						return fs.statSync(item_path).isDirectory() && !item.startsWith('.');
 					});
 
-					testConfigs.forEach(testConfig => {
-						const testConfigPath = path.join(versionPath, testConfig);
-						const reportFile = path.join(testConfigPath, 'report.xlsx');
+					test_configs.forEach(test_config => {
+						const test_config_path = path.join(version_path, test_config);
+						const report_file = path.join(test_config_path, 'report.xlsx');
 
 						// Check if report.xlsx exists
-						if (fs.existsSync(reportFile)) {
+						if (fs.existsSync(report_file)) {
 							try {
-								const stats = fs.statSync(reportFile);
-								const relativePath = path.relative(baseDir, reportFile).replace(/\\/g, '/');
+								const stats = fs.statSync(report_file);
+								const relative_path = path.relative(base_dir, report_file).replace(/\\/g, '/');
 
-								structure.vendors[vendor].models[model].versions[version].testConfigs[testConfig] = {
+								structure.vendors[vendor].models[model].versions[version].test_configs[test_config] = {
 									name: 'report.xlsx',
-									path: relativePath,
+									path: relative_path,
 									size: stats.size,
 									modified: stats.mtime.toISOString()
 								};
 							} catch (err) {
-								console.error(`Error reading report file ${reportFile}: ${err.message}`);
+								console.error(`Error reading report file ${report_file}: ${err.message}`);
 							}
 						}
 					});
@@ -124,11 +124,11 @@ function scanReportsDirectory(dir, baseDir = dir) {
 
 // Create server
 const server = http.createServer((req, res) => {
-	const parsedUrl = url.parse(req.url);
-	let pathname = parsedUrl.pathname;
+	const parsed_url = url.parse(req.url);
+	let pathname = parsed_url.pathname;
 
 	// CORS headers for all API responses
-	const corsHeaders = {
+	const cors_headers = {
 		'Access-Control-Allow-Origin': '*',
 		'Access-Control-Allow-Methods': 'GET, OPTIONS',
 		'Access-Control-Allow-Headers': 'Content-Type'
@@ -136,17 +136,17 @@ const server = http.createServer((req, res) => {
 
 	// Handle preflight requests
 	if (req.method === 'OPTIONS') {
-		res.writeHead(204, corsHeaders);
+		res.writeHead(204, cors_headers);
 		res.end();
 		return;
 	}
 
 	// API endpoint to get report structure
 	if (pathname === '/api/reports') {
-		const structure = scanReportsDirectory(REPORTS_DIR);
+		const structure = scan_reports_directory(REPORTS_DIR);
 		res.writeHead(200, {
 			'Content-Type': 'application/json',
-			...corsHeaders
+			...cors_headers
 		});
 		res.end(JSON.stringify(structure));
 		return;
@@ -154,16 +154,16 @@ const server = http.createServer((req, res) => {
 
 	// API endpoint to search reports
 	if (pathname === '/api/search') {
-		const query = parsedUrl.query;
-		const searchParams = new URLSearchParams(query);
-		const searchTerm = searchParams.get('q') || '';
+		const query = parsed_url.query;
+		const search_params = new URLSearchParams(query);
+		const search_term = search_params.get('q') || '';
 
-		const structure = scanReportsDirectory(REPORTS_DIR);
-		const results = searchReports(structure, searchTerm);
+		const structure = scan_reports_directory(REPORTS_DIR);
+		const results = search_reports(structure, search_term);
 
 		res.writeHead(200, {
 			'Content-Type': 'application/json',
-			...corsHeaders
+			...cors_headers
 		});
 		res.end(JSON.stringify(results));
 		return;
@@ -171,71 +171,71 @@ const server = http.createServer((req, res) => {
 
 	// API endpoint to find and serve PDF files with wildcard matching
 	if (pathname.startsWith('/api/pdf/')) {
-		const requestedPath = pathname.substring('/api/pdf/'.length);
-		console.log(`PDF file requested: ${requestedPath}`);
+		const requested_path = pathname.substring('/api/pdf/'.length);
+		console.log(`PDF file requested: ${requested_path}`);
 
 		// Extract directory path (remove report.xlsx if present)
-		const dirPath = requestedPath.replace('/report.xlsx', '');
-		const fullDirPath = path.join(REPORTS_DIR, dirPath);
+		const dir_path = requested_path.replace('/report.xlsx', '');
+		const full_dir_path = path.join(REPORTS_DIR, dir_path);
 
-		console.log(`Looking for PDF in directory: ${fullDirPath}`);
+		console.log(`Looking for PDF in directory: ${full_dir_path}`);
 
 		// Security check - ensure we're only serving files from REPORTS_DIR
-		const resolvedReportsDir = path.resolve(REPORTS_DIR);
-		const resolvedDirPath = path.resolve(fullDirPath);
+		const resolved_reports_dir = path.resolve(REPORTS_DIR);
+		const resolved_dir_path = path.resolve(full_dir_path);
 
-		if (!resolvedDirPath.startsWith(resolvedReportsDir + path.sep) && resolvedDirPath !== resolvedReportsDir) {
+		if (!resolved_dir_path.startsWith(resolved_reports_dir + path.sep) && resolved_dir_path !== resolved_reports_dir) {
 			console.log('Security check failed: Path traversal attempt detected');
-			res.writeHead(403, corsHeaders);
+			res.writeHead(403, cors_headers);
 			res.end('Forbidden: Path traversal not allowed');
 			return;
 		}
 
 		// Check if directory exists
-		if (!fs.existsSync(fullDirPath)) {
-			console.log(`Directory not found: ${fullDirPath}`);
-			res.writeHead(404, corsHeaders);
+		if (!fs.existsSync(full_dir_path)) {
+			console.log(`Directory not found: ${full_dir_path}`);
+			res.writeHead(404, cors_headers);
 			res.end('Directory not found');
 			return;
 		}
 
 		try {
 			// Read directory contents
-			const files = fs.readdirSync(fullDirPath);
+			const files = fs.readdirSync(full_dir_path);
 
 			// Find PDF file matching the pattern
-			const pdfFile = files.find(file =>
+			const pdf_file = files.find(file =>
 				file.toLowerCase().startsWith('rate-vs-range-report') &&
 				file.toLowerCase().endsWith('.pdf')
 			);
 
-			if (!pdfFile) {
-				console.log(`No PDF file found in directory: ${fullDirPath}`);
+			if (!pdf_file) {
+				console.log(`No PDF file found in directory: ${full_dir_path}`);
 				console.log('Available files:', files);
-				res.writeHead(404, corsHeaders);
+				res.writeHead(404, cors_headers);
 				res.end('PDF file not found');
 				return;
 			}
 
-			console.log(`Found PDF file: ${pdfFile}`);
-			const pdfPath = path.join(fullDirPath, pdfFile);
+			console.log(`Found PDF file: ${pdf_file}`);
+			const pdf_path = path.join(full_dir_path, pdf_file);
 
 			// Serve the PDF file
-			fs.readFile(pdfPath, (readErr, data) => {
-				if (readErr) {
-					console.log(`Error reading PDF file: ${readErr.message}`);
-					res.writeHead(500, corsHeaders);
+			fs.readFile(pdf_path, (read_err, data) => {
+				if (read_err) {
+					console.log(`Error reading PDF file: ${read_err.message}`);
+					res.writeHead(500, cors_headers);
 					res.end('Failed to read PDF file');
 					return;
 				}
 
-				console.log(`Serving PDF file: ${pdfPath} (${data.length} bytes)`);
+				console.log(`Serving PDF file: ${pdf_path} (${data.length} bytes)`);
 
 				const headers = {
 					'Content-Type': 'application/pdf',
 					'Content-Length': data.length,
-					'Content-Disposition': `attachment; filename="${pdfFile}"`,
-					...corsHeaders
+					'Content-Disposition': `attachment; filename="${pdf_file}"`,
+					...cors_headers
 				};
 
 				res.writeHead(200, headers);
@@ -243,8 +243,8 @@ const server = http.createServer((req, res) => {
 			});
 
 		} catch (error) {
-			console.error(`Error accessing directory ${fullDirPath}:`, error);
-			res.writeHead(500, corsHeaders);
+			console.error(`Error accessing directory ${full_dir_path}:`, error);
+			res.writeHead(500, cors_headers);
 			res.end('Internal server error');
 		}
 
@@ -253,72 +253,72 @@ const server = http.createServer((req, res) => {
 
 	// Serve report files and images
 	if (pathname.startsWith('/reports/')) {
-		const requestedPath = pathname.substring('/reports/'.length);
-		console.log(`Report file/image requested: ${requestedPath}`);
+		const requested_path = pathname.substring('/reports/'.length);
+		console.log(`Report file/image requested: ${requested_path}`);
 
 		// Join with reports directory
-		const filePath = path.join(REPORTS_DIR, requestedPath);
-		console.log(`Resolved file path: ${filePath}`);
+		const file_path = path.join(REPORTS_DIR, requested_path);
+		console.log(`Resolved file path: ${file_path}`);
 
 		// Normalize paths for comparison
-		const resolvedReportsDir = path.resolve(REPORTS_DIR);
-		const resolvedFilePath = path.resolve(filePath);
+		const resolved_reports_dir = path.resolve(REPORTS_DIR);
+		const resolved_file_path = path.resolve(file_path);
 
-		console.log(`Reports directory: ${resolvedReportsDir}`);
-		console.log(`Requested file: ${resolvedFilePath}`);
+		console.log(`Reports directory: ${resolved_reports_dir}`);
+		console.log(`Requested file: ${resolved_file_path}`);
 
 		// Security check - ensure we're only serving files from REPORTS_DIR
-		if (!resolvedFilePath.startsWith(resolvedReportsDir + path.sep) && resolvedFilePath !== resolvedReportsDir) {
+		if (!resolved_file_path.startsWith(resolved_reports_dir + path.sep) && resolved_file_path !== resolved_reports_dir) {
 			console.log('Security check failed: Path traversal attempt detected');
-			res.writeHead(403, corsHeaders);
+			res.writeHead(403, cors_headers);
 			res.end('Forbidden: Path traversal not allowed');
 			return;
 		}
 
 		// Check if file exists and is readable
-		fs.access(filePath, fs.constants.F_OK | fs.constants.R_OK, (err) => {
+		fs.access(file_path, fs.constants.F_OK | fs.constants.R_OK, (err) => {
 			if (err) {
 				console.log(`File access error: ${err.message}`);
 				if (err.code === 'ENOENT') {
-					res.writeHead(404, corsHeaders);
+					res.writeHead(404, cors_headers);
 					res.end('File not found');
 				} else if (err.code === 'EACCES') {
-					res.writeHead(403, corsHeaders);
+					res.writeHead(403, cors_headers);
 					res.end('Permission denied');
 				} else {
-					res.writeHead(500, corsHeaders);
+					res.writeHead(500, cors_headers);
 					res.end('Internal server error');
 				}
 				return;
 			}
 
 			// File exists and is readable, serve it
-			fs.readFile(filePath, (readErr, data) => {
-				if (readErr) {
-					console.log(`File read error: ${readErr.message}`);
-					res.writeHead(500, corsHeaders);
+			fs.readFile(file_path, (read_err, data) => {
+				if (read_err) {
+					console.log(`File read error: ${read_err.message}`);
+					res.writeHead(500, cors_headers);
 					res.end('Failed to read file');
 					return;
 				}
 
-				const ext = path.extname(filePath);
-				console.log(`Serving file: ${filePath} (${data.length} bytes)`);
+				const ext = path.extname(file_path);
+				console.log(`Serving file: ${file_path} (${data.length} bytes)`);
 
 				// Set appropriate headers based on file type
-				const contentType = mimeTypes[ext] || 'application/octet-stream';
+				const content_type = mime_types[ext] || 'application/octet-stream';
 				const headers = {
-					'Content-Type': contentType,
+					'Content-Type': content_type,
 					'Content-Length': data.length,
-					...corsHeaders
+					...cors_headers
 				};
 
 				// For Excel files, add attachment header
 				if (ext === '.xlsx' || ext === '.xls') {
-					headers['Content-Disposition'] = `attachment; filename="${path.basename(filePath)}"`;
+					headers['Content-Disposition'] = `attachment; filename="${path.basename(file_path)}"`;
 				}
 
 				// For images, add cache headers
-				if (contentType.startsWith('image/')) {
+				if (content_type.startsWith('image/')) {
 					headers['Cache-Control'] = 'public, max-age=3600'; // Cache for 1 hour
 				}
 
@@ -334,51 +334,51 @@ const server = http.createServer((req, res) => {
 		pathname = '/index.html';
 	}
 
-	const filepath = path.join(PUBLIC_DIR, pathname);
-	const ext = path.extname(filepath);
+	const file_path_static = path.join(PUBLIC_DIR, pathname);
+	const ext = path.extname(file_path_static);
 
-	fs.readFile(filepath, (err, data) => {
+	fs.readFile(file_path_static, (err, data) => {
 		if (err) {
 			console.log(`Static file error: ${err.message}`);
-			res.writeHead(404, corsHeaders);
+			res.writeHead(404, cors_headers);
 			res.end('404 Not Found');
 			return;
 		}
 
 		res.writeHead(200, {
-			'Content-Type': mimeTypes[ext] || 'text/plain',
-			...corsHeaders
+			'Content-Type': mime_types[ext] || 'text/plain',
+			...cors_headers
 		});
 		res.end(data);
 	});
 });
 
 // Search function (updated to include test configuration information)
-function searchReports(structure, searchTerm) {
+function search_reports(structure, search_term) {
 	const results = [];
-	const term = searchTerm.toLowerCase();
+	const term = search_term.toLowerCase();
 
-	Object.entries(structure.vendors).forEach(([vendor, vendorData]) => {
-		Object.entries(vendorData.models).forEach(([model, modelData]) => {
-			Object.entries(modelData.versions).forEach(([version, versionData]) => {
-				Object.entries(versionData.testConfigs).forEach(([testConfig, testConfigData]) => {
+	Object.entries(structure.vendors).forEach(([vendor, vendor_data]) => {
+		Object.entries(vendor_data.models).forEach(([model, model_data]) => {
+			Object.entries(model_data.versions).forEach(([version, version_data]) => {
+				Object.entries(version_data.test_configs).forEach(([test_config, test_config_data]) => {
 					// Check if search term matches vendor, model, version, or test config
 					if (vendor.toLowerCase().includes(term) ||
 						model.toLowerCase().includes(term) ||
 						version.toLowerCase().includes(term) ||
-						testConfig.toLowerCase().includes(term)) {
+						test_config.toLowerCase().includes(term)) {
 
 						results.push({
 							vendor,
 							model,
 							version,
-							testConfig,
-							file: testConfigData.name,
-							path: testConfigData.path,
-							size: testConfigData.size,
-							modified: testConfigData.modified,
-							vendorLogo: vendorData.logo,
-							modelImage: modelData.image
+							test_config,
+							file: test_config_data.name,
+							path: test_config_data.path,
+							size: test_config_data.size,
+							modified: test_config_data.modified,
+							vendor_logo: vendor_data.logo,
+							model_image: model_data.image
 						});
 					}
 				});
@@ -402,12 +402,12 @@ server.listen(PORT, () => {
 
 		// Create example structure with test configuration folders
 		console.log('\nCreating example directory structure...');
-		const exampleVendors = ['Adtran', 'Eero', 'Netgear'];
-		exampleVendors.forEach(vendor => {
-			const vendorPath = path.join(REPORTS_DIR, vendor);
-			if (!fs.existsSync(vendorPath)) {
-				fs.mkdirSync(vendorPath, { recursive: true });
-				console.log(`  Created: ${vendorPath}`);
+		const example_vendors = ['Adtran', 'Eero', 'Netgear'];
+		example_vendors.forEach(vendor => {
+			const vendor_path = path.join(REPORTS_DIR, vendor);
+			if (!fs.existsSync(vendor_path)) {
+				fs.mkdirSync(vendor_path, { recursive: true });
+				console.log(`  Created: ${vendor_path}`);
 			}
 		});
 
@@ -455,16 +455,16 @@ server.listen(PORT, () => {
 	}
 
 	// Scan and display current report structure
-	const structure = scanReportsDirectory(REPORTS_DIR);
-	const reportCount = countReports(structure);
-	const imageCount = countImages(structure);
-	console.log(`\nFound ${reportCount.vendors} vendors, ${reportCount.models} models, ${reportCount.versions} versions, ${reportCount.testConfigs} test configurations`);
-	console.log(`Images: ${imageCount.vendorLogos} vendor logos, ${imageCount.modelImages} device images`);
+	const structure = scan_reports_directory(REPORTS_DIR);
+	const report_count = count_reports(structure);
+	const image_count = count_images(structure);
+	console.log(`\nFound ${report_count.vendors} vendors, ${report_count.models} models, ${report_count.versions} versions, ${report_count.test_configs} test configurations`);
+	console.log(`Images: ${image_count.vendor_logos} vendor logos, ${image_count.model_images} device images`);
 });
 
 // Count reports in structure
-function countReports(structure) {
-	let vendors = 0, models = 0, versions = 0, testConfigs = 0;
+function count_reports(structure) {
+	let vendors = 0, models = 0, versions = 0, test_configs = 0;
 
 	Object.values(structure.vendors).forEach(vendor => {
 		vendors++;
@@ -472,24 +472,24 @@ function countReports(structure) {
 			models++;
 			Object.values(model.versions).forEach(version => {
 				versions++;
-				testConfigs += Object.keys(version.testConfigs).length;
+				test_configs += Object.keys(version.test_configs).length;
 			});
 		});
 	});
 
-	return { vendors, models, versions, testConfigs };
+	return { vendors, models, versions, test_configs };
 }
 
 // Count images in structure
-function countImages(structure) {
-	let vendorLogos = 0, modelImages = 0;
+function count_images(structure) {
+	let vendor_logos = 0, model_images = 0;
 
 	Object.values(structure.vendors).forEach(vendor => {
-		if (vendor.logo) vendorLogos++;
+		if (vendor.logo) vendor_logos++;
 		Object.values(vendor.models).forEach(model => {
-			if (model.image) modelImages++;
+			if (model.image) model_images++;
 		});
 	});
 
-	return { vendorLogos, modelImages };
+	return { vendor_logos, model_images };
 }

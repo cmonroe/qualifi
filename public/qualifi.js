@@ -1,10 +1,10 @@
-let chartInstance = null;
-let isBatchLoading = false;
-let loadedFiles = new Map();
-let chartType = 'line';
-let serverReports = null;
-let selectedServerReports = new Set();
-let activeNotifications = [];
+let chart_instance = null;
+let is_batch_loading = false;
+let loaded_files = new Map();
+let chart_type = 'line';
+let server_reports = null;
+let selected_server_reports = new Set();
+let active_notifications = [];
 
 // Set Chart.js global font - will be updated when font loads
 Chart.defaults.font.family = "var(--primary-font)";
@@ -20,13 +20,13 @@ window.addEventListener('fontLoaded', function(event) {
 	console.log('Chart.js font updated to:', fontFamily);
 
 	// Redraw chart if it exists
-	if (chartInstance) {
-		chartInstance.update();
+	if (chart_instance) {
+		chart_instance.update();
 	}
 });
 
 // Helper function to create image element with fallback
-function createImageElement(src, className, alt = '') {
+function create_image_element(src, className, alt = '') {
 	const img = document.createElement('img');
 	img.className = className;
 	img.alt = alt;
@@ -42,7 +42,7 @@ function createImageElement(src, className, alt = '') {
 }
 
 // Helper function to determine band from frequency
-function determineBand(frequency) {
+function determine_band(frequency) {
 	if (frequency >= 2412 && frequency <= 2484) {
 		return '2G';
 	} else if (frequency >= 5160 && frequency <= 5885) {
@@ -55,7 +55,7 @@ function determineBand(frequency) {
 }
 
 // Helper function to format channel number correctly for display
-function formatChannelNumber(channel, band) {
+function format_channel_number(channel, band) {
 	if (band === '6G' && channel >= 191) {
 		// Convert 6G channel from continuation format to correct format
 		return channel - 190;
@@ -64,19 +64,19 @@ function formatChannelNumber(channel, band) {
 }
 
 // Helper function to get display channel string
-function getChannelDisplay(channel, band) {
-	const displayChannel = formatChannelNumber(channel, band);
+function get_channel_display(channel, band) {
+	const displayChannel = format_channel_number(channel, band);
 	return `CH${displayChannel}`;
 }
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-	loadServerReports();
-	initializeLocalFileUpload();
+	load_server_reports();
+	initialize_local_file_upload();
 });
 
 // Tab switching
-function switchTab(tab) {
+function switch_tab(tab) {
 	const serverTab = document.getElementById('serverTab');
 	const localTab = document.getElementById('localTab');
 	const tabButtons = document.querySelectorAll('.tab-button');
@@ -95,15 +95,15 @@ function switchTab(tab) {
 }
 
 // Load server reports
-async function loadServerReports() {
+async function load_server_reports() {
 	try {
 		const response = await fetch('/api/reports');
 		if (!response.ok) {
 			throw new Error(`HTTP error! status: ${response.status}`);
 		}
 		const data = await response.json();
-		serverReports = data;
-		renderReportBrowser(data);
+		server_reports = data;
+		render_report_browser(data);
 	} catch (error) {
 		console.error('Error loading server reports:', error);
 		document.getElementById('reportBrowser').innerHTML = `
@@ -113,28 +113,28 @@ async function loadServerReports() {
 }
 
 // Refresh reports
-function refreshReports() {
-	loadServerReports();
+function refresh_reports() {
+	load_server_reports();
 }
 
 // Search reports
-async function searchReports(query) {
+async function search_reports(query) {
 	if (!query.trim()) {
-		renderReportBrowser(serverReports);
+		render_report_browser(server_reports);
 		return;
 	}
 
 	try {
 		const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
 		const results = await response.json();
-		renderSearchResults(results);
+		render_search_results(results);
 	} catch (error) {
 		console.error('Error searching reports:', error);
 	}
 }
 
 // Render report browser with image support - version level selection
-function renderReportBrowser(data) {
+function render_report_browser(data) {
 	const browser = document.getElementById('reportBrowser');
 
 	if (!data || Object.keys(data.vendors).length === 0) {
@@ -149,43 +149,43 @@ function renderReportBrowser(data) {
 
 	let html = '';
 
-	Object.entries(data.vendors).forEach(([vendor, vendorData]) => {
-		const vendorId = vendor.replace(/\s+/g, '_');
+	Object.entries(data.vendors).forEach(([vendor, vendor_data]) => {
+		const vendor_id = vendor.replace(/\s+/g, '_');
 		html += `
 			<div class="vendor-group">
-				<div class="vendor-header" onclick="toggleVendor('${vendorId}')">
+				<div class="vendor-header" onclick="toggle_vendor('${vendor_id}')">
 					<span class="toggle-icon">▶</span>
-					${vendorData.logo ? `<img src="/reports/${vendorData.logo}" class="vendor-logo" alt="${vendor} logo" onerror="this.style.display='none'">` : ''}
+					${vendor_data.logo ? `<img src="/reports/${vendor_data.logo}" class="vendor-logo" alt="${vendor} logo" onerror="this.style.display='none'">` : ''}
 					<span style="flex: 1;">${vendor}</span>
-					<span class="file-count">${countVendorTestConfigs(vendorData)} test configs</span>
+					<span class="file-count">${count_vendor_test_configs(vendor_data)} test configs</span>
 				</div>
-				<div class="vendor-content" id="vendor-${vendorId}">
+				<div class="vendor-content" id="vendor-${vendor_id}">
 		`;
 
-		Object.entries(vendorData.models).forEach(([model, modelData]) => {
-			const modelId = `${vendorId}_${model.replace(/\s+/g, '_')}`;
+		Object.entries(vendor_data.models).forEach(([model, model_data]) => {
+			const model_id = `${vendor_id}_${model.replace(/\s+/g, '_')}`;
 			html += `
 				<div class="model-group">
-					<div class="model-header" onclick="toggleModel('${modelId}')">
+					<div class="model-header" onclick="toggle_model('${model_id}')">
 						<span class="toggle-icon">▶</span>
-						${modelData.image ? `<img src="/reports/${modelData.image}" class="model-image" alt="${model} device" onerror="this.style.display='none'">` : ''}
+						${model_data.image ? `<img src="/reports/${model_data.image}" class="model-image" alt="${model} device" onerror="this.style.display='none'">` : ''}
 						<span style="flex: 1;">${model}</span>
-						<span class="file-count">${countModelTestConfigs(modelData)} test configs</span>
+						<span class="file-count">${count_model_test_configs(model_data)} test configs</span>
 					</div>
-					<div class="model-content" id="model-${modelId}">
+					<div class="model-content" id="model-${model_id}">
 			`;
 
-			Object.entries(modelData.versions).forEach(([version, versionData]) => {
-				const testConfigCount = Object.keys(versionData.testConfigs).length;
+			Object.entries(model_data.versions).forEach(([version, version_data]) => {
+				const testConfigCount = Object.keys(version_data.test_configs).length;
 
 				if (testConfigCount > 0) {
-					const reportId = `${vendor}|${model}|${version}`;
+					const report_id = `${vendor}|${model}|${version}`;
 					html += `
 						<div class="version-item">
 							<input type="checkbox" class="version-checkbox"
-								   id="report-${reportId.replace(/[|\/\s]/g, '_')}"
-								   value="${reportId}"
-								   onchange="toggleReportSelection('${reportId}')">
+								   id="report-${report_id.replace(/[|\/\s]/g, '_')}"
+								   value="${report_id}"
+								   onchange="toggle_report_selection('${report_id}')">
 							<div class="version-info">
 								<span class="version-label">v${version}</span>
 								<span class="file-count">${testConfigCount} test config${testConfigCount > 1 ? 's' : ''}</span>
@@ -211,7 +211,7 @@ function renderReportBrowser(data) {
 }
 
 // Render search results with image support
-function renderSearchResults(results) {
+function render_search_results(results) {
 	const browser = document.getElementById('reportBrowser');
 
 	if (results.length === 0) {
@@ -227,17 +227,17 @@ function renderSearchResults(results) {
 	let html = '<div class="search-results">';
 
 	results.forEach(result => {
-		const reportId = `${result.vendor}|${result.model}|${result.version}`;
+		const report_id = `${result.vendor}|${result.model}|${result.version}`;
 		html += `
 			<div class="search-result-item">
 				<input type="checkbox" class="version-checkbox"
-					   id="search-${reportId.replace(/[|\/\s]/g, '_')}"
-					   value="${reportId}"
-					   ${selectedServerReports.has(reportId) ? 'checked' : ''}
-					   onchange="toggleReportSelection('${reportId}')">
+					   id="search-${report_id.replace(/[|\/\s]/g, '_')}"
+					   value="${report_id}"
+					   ${selected_server_reports.has(report_id) ? 'checked' : ''}
+					   onchange="toggle_report_selection('${report_id}')">
 				<div class="search-result-images">
-					${result.vendorLogo ? `<img src="/reports/${result.vendorLogo}" class="search-vendor-logo" alt="${result.vendor} logo" onerror="this.style.display='none'">` : ''}
-					${result.modelImage ? `<img src="/reports/${result.modelImage}" class="search-model-image" alt="${result.model} device" onerror="this.style.display='none'">` : ''}
+					${result.vendor_logo ? `<img src="/reports/${result.vendor_logo}" class="search-vendor-logo" alt="${result.vendor} logo" onerror="this.style.display='none'">` : ''}
+					${result.model_image ? `<img src="/reports/${result.model_image}" class="search-model-image" alt="${result.model} device" onerror="this.style.display='none'">` : ''}
 				</div>
 				<div class="version-info" style="flex-direction: column; align-items: flex-start;">
 					<div><strong>${result.vendor} ${result.model}</strong> v${result.version}</div>
@@ -252,7 +252,7 @@ function renderSearchResults(results) {
 }
 
 // Helper function to format file sizes
-function formatFileSize(bytes) {
+function format_file_size(bytes) {
 	if (bytes === 0) return '0 Bytes';
 	const k = 1024;
 	const sizes = ['Bytes', 'KB', 'MB', 'GB'];
@@ -261,76 +261,76 @@ function formatFileSize(bytes) {
 }
 
 // Helper functions for counting test configurations
-function countVendorTestConfigs(vendorData) {
+function count_vendor_test_configs(vendor_data) {
 	let count = 0;
-	Object.values(vendorData.models).forEach(modelData => {
-		Object.values(modelData.versions).forEach(versionData => {
-			count += Object.keys(versionData.testConfigs || {}).length;
+	Object.values(vendor_data.models).forEach(model_data => {
+		Object.values(model_data.versions).forEach(version_data => {
+			count += Object.keys(version_data.test_configs || {}).length;
 		});
 	});
 	return count;
 }
 
-function countModelTestConfigs(modelData) {
+function count_model_test_configs(model_data) {
 	let count = 0;
-	Object.values(modelData.versions).forEach(versionData => {
-		count += Object.keys(versionData.testConfigs || {}).length;
+	Object.values(model_data.versions).forEach(version_data => {
+		count += Object.keys(version_data.test_configs || {}).length;
 	});
 	return count;
 }
 
 // Legacy helper functions (updated for new structure)
-function countVendorFiles(vendorData) {
+function count_vendor_files(vendor_data) {
 	let count = 0;
-	Object.values(vendorData.models).forEach(modelData => {
-		Object.values(modelData.versions).forEach(versionData => {
-			count += Object.keys(versionData.testConfigs || {}).length;
+	Object.values(vendor_data.models).forEach(model_data => {
+		Object.values(model_data.versions).forEach(version_data => {
+			count += Object.keys(version_data.test_configs || {}).length;
 		});
 	});
 	return count;
 }
 
-function countModelFiles(modelData) {
+function count_model_files(model_data) {
 	let count = 0;
-	Object.values(modelData.versions).forEach(versionData => {
-		count += Object.keys(versionData.testConfigs || {}).length;
+	Object.values(model_data.versions).forEach(version_data => {
+		count += Object.keys(version_data.test_configs || {}).length;
 	});
 	return count;
 }
 
 // Toggle vendor expansion
-function toggleVendor(vendorId) {
+function toggle_vendor(vendor_id) {
 	const header = event.currentTarget;
-	const content = document.getElementById(`vendor-${vendorId}`);
+	const content = document.getElementById(`vendor-${vendor_id}`);
 	header.classList.toggle('expanded');
 	content.classList.toggle('expanded');
 }
 
 // Toggle model expansion
-function toggleModel(modelId) {
+function toggle_model(model_id) {
 	const header = event.currentTarget;
-	const content = document.getElementById(`model-${modelId}`);
+	const content = document.getElementById(`model-${model_id}`);
 	header.classList.toggle('expanded');
 	content.classList.toggle('expanded');
 	event.stopPropagation();
 }
 
 // Toggle report selection
-function toggleReportSelection(reportId) {
-	if (selectedServerReports.has(reportId)) {
-		selectedServerReports.delete(reportId);
+function toggle_report_selection(report_id) {
+	if (selected_server_reports.has(report_id)) {
+		selected_server_reports.delete(report_id);
 	} else {
-		selectedServerReports.add(reportId);
+		selected_server_reports.add(report_id);
 	}
-	updateSelectedReportsList();
+	update_selected_reports_list();
 }
 
 // Update selected reports list
-function updateSelectedReportsList() {
+function update_selected_reports_list() {
 	const container = document.getElementById('selectedReports');
 	const list = document.getElementById('selectedReportsList');
 
-	if (selectedServerReports.size === 0) {
+	if (selected_server_reports.size === 0) {
 		container.style.display = 'none';
 		return;
 	}
@@ -338,12 +338,12 @@ function updateSelectedReportsList() {
 	container.style.display = 'block';
 	let html = '';
 
-	selectedServerReports.forEach(reportId => {
-		const [vendor, model, version] = reportId.split('|');
+	selected_server_reports.forEach(report_id => {
+		const [vendor, model, version] = report_id.split('|');
 		html += `
 			<div class="selected-report-item">
 				<span>${vendor} ${model} v${version}</span>
-				<button class="btn-small btn-remove" onclick="removeSelectedReport('${reportId}')">Remove</button>
+				<button class="btn-small btn-remove" onclick="remove_selected_report('${report_id}')">Remove</button>
 			</div>
 		`;
 	});
@@ -352,26 +352,26 @@ function updateSelectedReportsList() {
 }
 
 // Remove selected report
-function removeSelectedReport(reportId) {
-	selectedServerReports.delete(reportId);
+function remove_selected_report(report_id) {
+	selected_server_reports.delete(report_id);
 	// Uncheck the checkbox
-	const checkbox = document.querySelector(`input[value="${reportId}"]`);
+	const checkbox = document.querySelector(`input[value="${report_id}"]`);
 	if (checkbox) checkbox.checked = false;
-	updateSelectedReportsList();
+	update_selected_reports_list();
 }
 
 // Expand all vendors
-function expandAllVendors() {
+function expand_all_vendors() {
 	document.querySelectorAll('.vendor-header').forEach(header => {
 		header.classList.add('expanded');
-		const vendorId = header.onclick.toString().match(/toggleVendor\('(.+?)'\)/)[1];
-		const content = document.getElementById(`vendor-${vendorId}`);
+		const vendor_id = header.onclick.toString().match(/toggle_vendor\('(.+?)'\)/)[1];
+		const content = document.getElementById(`vendor-${vendor_id}`);
 		if (content) content.classList.add('expanded');
 	});
 }
 
 // Collapse all vendors
-function collapseAllVendors() {
+function collapse_all_vendors() {
 	document.querySelectorAll('.vendor-header').forEach(header => {
 		header.classList.remove('expanded');
 	});
@@ -387,118 +387,118 @@ function collapseAllVendors() {
 }
 
 // Select latest version from each model
-function selectLatestVersions() {
-	if (!serverReports) return;
+function select_latest_versions() {
+	if (!server_reports) return;
 
-	selectedServerReports.clear();
+	selected_server_reports.clear();
 
-	Object.entries(serverReports.vendors).forEach(([vendor, vendorData]) => {
-		Object.entries(vendorData.models).forEach(([model, modelData]) => {
+	Object.entries(server_reports.vendors).forEach(([vendor, vendor_data]) => {
+		Object.entries(vendor_data.models).forEach(([model, model_data]) => {
 			// Get versions and sort them (assuming semantic versioning)
-			const versions = Object.keys(modelData.versions).sort((a, b) => {
-				return compareVersions(b, a); // Sort descending
+			const versions = Object.keys(model_data.versions).sort((a, b) => {
+				return compare_versions(b, a); // Sort descending
 			});
 
-			if (versions.length > 0 && Object.keys(modelData.versions[versions[0]].testConfigs).length > 0) {
-				const reportId = `${vendor}|${model}|${versions[0]}`;
-				selectedServerReports.add(reportId);
+			if (versions.length > 0 && Object.keys(model_data.versions[versions[0]].test_configs).length > 0) {
+				const report_id = `${vendor}|${model}|${versions[0]}`;
+				selected_server_reports.add(report_id);
 
 				// Check the checkbox
-				const checkbox = document.querySelector(`input[value="${reportId}"]`);
+				const checkbox = document.querySelector(`input[value="${report_id}"]`);
 				if (checkbox) checkbox.checked = true;
 			}
 		});
 	});
 
-	updateSelectedReportsList();
+	update_selected_reports_list();
 }
 
 // Compare version strings
-function compareVersions(a, b) {
-	const partsA = a.split('.').map(num => parseInt(num) || 0);
-	const partsB = b.split('.').map(num => parseInt(num) || 0);
+function compare_versions(a, b) {
+	const parts_a = a.split('.').map(num => parseInt(num) || 0);
+	const parts_b = b.split('.').map(num => parseInt(num) || 0);
 
-	for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-		const numA = partsA[i] || 0;
-		const numB = partsB[i] || 0;
+	for (let i = 0; i < Math.max(parts_a.length, parts_b.length); i++) {
+		const num_a = parts_a[i] || 0;
+		const num_b = parts_b[i] || 0;
 
-		if (numA !== numB) {
-			return numA - numB;
+		if (num_a !== num_b) {
+			return num_a - num_b;
 		}
 	}
 
 	return 0;
 }
 
-async function loadSelectedReports() {
-	if (selectedServerReports.size === 0) {
+async function load_selected_reports() {
+	if (selected_server_reports.size === 0) {
 		console.log('No reports selected');
 		return;
 	}
 
-	console.log('Loading selected reports:', Array.from(selectedServerReports));
+	console.log('Loading selected reports:', Array.from(selected_server_reports));
 
-	const loadingMsg = document.createElement('div');
-	loadingMsg.className = 'loading';
-	loadingMsg.textContent = 'Loading reports from server...';
-	document.body.appendChild(loadingMsg);
+	const loading_msg = document.createElement('div');
+	loading_msg.className = 'loading';
+	loading_msg.textContent = 'Loading reports from server...';
+	document.body.appendChild(loading_msg);
 
 	// Set batch loading flag to prevent DOM updates
-	isBatchLoading = true;
+	is_batch_loading = true;
 
 	try {
-		let loadedCount = 0;
+		let loaded_count = 0;
 
-		for (const reportId of selectedServerReports) {
-			console.log('Processing reportId:', reportId);
+		for (const report_id of selected_server_reports) {
+			console.log('Processing report_id:', report_id);
 
 			// Split into 3 parts (vendor, model, version)
-			const [vendor, model, version] = reportId.split('|');
+			const [vendor, model, version] = report_id.split('|');
 
 			if (!vendor || !model || !version) {
-				console.error('Invalid reportId format:', reportId);
+				console.error('Invalid report_id format:', report_id);
 				continue;
 			}
 
 			// Get version data for this selection
-			const versionData = serverReports?.vendors?.[vendor]?.models?.[model]?.versions?.[version];
-			if (!versionData || !versionData.testConfigs) {
-				console.error('Version data not found for:', reportId);
+			const version_data = server_reports?.vendors?.[vendor]?.models?.[model]?.versions?.[version];
+			if (!version_data || !version_data.test_configs) {
+				console.error('Version data not found for:', report_id);
 				continue;
 			}
 
-			console.log('Found test configs:', Object.keys(versionData.testConfigs));
+			console.log('Found test configs:', Object.keys(version_data.test_configs));
 
 			// Load all test configurations for this version
-			for (const [testConfig, testConfigData] of Object.entries(versionData.testConfigs)) {
-				console.log(`Loading test config: ${testConfig}`, testConfigData);
+			for (const [test_config, test_config_data] of Object.entries(version_data.test_configs)) {
+				console.log(`Loading test config: ${test_config}`, test_config_data);
 
 				try {
-					const response = await fetch(`/reports/${testConfigData.path}`);
+					const response = await fetch(`/reports/${test_config_data.path}`);
 					if (!response.ok) {
-						console.error(`Failed to fetch ${testConfigData.path}: ${response.status}`);
+						console.error(`Failed to fetch ${test_config_data.path}: ${response.status}`);
 						continue;
 					}
 
 					const blob = await response.blob();
-					const fileName = `${vendor}_${model}_v${version}_${testConfig}_${testConfigData.name}`;
-					const virtualFile = new File([blob], fileName, { type: blob.type });
+					const file_name = `${vendor}_${model}_v${version}_${test_config}_${test_config_data.name}`;
+					const virtualFile = new File([blob], file_name, { type: blob.type });
 
-					await loadExcelFile(virtualFile, true, testConfigData.path); // true indicates from server, pass original path
-					loadedCount++;
-					console.log(`Successfully loaded: ${fileName}`);
+					await load_excel_file(virtualFile, true, test_config_data.path); // true indicates from server, pass original path
+					loaded_count++;
+					console.log(`Successfully loaded: ${file_name}`);
 
 				} catch (fetchError) {
-					console.error(`Error loading test config ${testConfig}:`, fetchError);
+					console.error(`Error loading test config ${test_config}:`, fetchError);
 				}
 			}
 		}
 
-		console.log(`Loaded ${loadedCount} test configuration files`);
+		console.log(`Loaded ${loaded_count} test configuration files`);
 
 		// Clear selections after loading
-		selectedServerReports.clear();
-		updateSelectedReportsList();
+		selected_server_reports.clear();
+		update_selected_reports_list();
 
 		// Uncheck all checkboxes
 		document.querySelectorAll('.version-checkbox:checked').forEach(cb => {
@@ -506,167 +506,167 @@ async function loadSelectedReports() {
 		});
 
 		// Re-enable DOM updates and update everything once
-		isBatchLoading = false;
-		updateFileList();
-		updateTestOptions();
+		is_batch_loading = false;
+		update_file_list();
+		update_test_options();
 
 		// Switch to test selector if files loaded
-		if (loadedFiles.size > 0) {
-			showSuccess(`Successfully loaded ${loadedCount} test configurations from server`);
+		if (loaded_files.size > 0) {
+			show_success(`Successfully loaded ${loaded_count} test configurations from server`);
 
 			// Delay scrolling until after all DOM updates are complete
 			setTimeout(() => {
 				document.querySelector('.test-selector').scrollIntoView({ behavior: 'smooth' });
 			}, 100);
 		} else {
-			showError('No valid test configurations were loaded');
+			show_error('No valid test configurations were loaded');
 		}
 
 	} catch (error) {
 		console.error('Error loading reports:', error);
-		showError(`Failed to load reports from server: ${error.message}`);
+		show_error(`Failed to load reports from server: ${error.message}`);
 	} finally {
 		// Always re-enable DOM updates and remove loading message
-		isBatchLoading = false;
-		loadingMsg.remove();
+		is_batch_loading = false;
+		loading_msg.remove();
 	}
 }
 
 // Initialize local file upload
-function initializeLocalFileUpload() {
-	document.getElementById('excelFile').addEventListener('change', handleFileSelect);
+function initialize_local_file_upload() {
+	document.getElementById('excelFile').addEventListener('change', handle_file_select);
 
 	// Enable drag and drop
-	const fileLabel = document.querySelector('.file-input-label');
-	if (fileLabel) {
-		['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-			fileLabel.addEventListener(eventName, preventDefaults, false);
+	const file_label = document.querySelector('.file-input-label');
+	if (file_label) {
+		['dragenter', 'dragover', 'dragleave', 'drop'].forEach(event_name => {
+			file_label.addEventListener(event_name, prevent_defaults, false);
 		});
 
-		['dragenter', 'dragover'].forEach(eventName => {
-			fileLabel.addEventListener(eventName, highlight, false);
+		['dragenter', 'dragover'].forEach(event_name => {
+			file_label.addEventListener(event_name, highlight, false);
 		});
 
-		['dragleave', 'drop'].forEach(eventName => {
-			fileLabel.addEventListener(eventName, unhighlight, false);
+		['dragleave', 'drop'].forEach(event_name => {
+			file_label.addEventListener(event_name, unhighlight, false);
 		});
 
-		fileLabel.addEventListener('drop', handleDrop, false);
+		file_label.addEventListener('drop', handle_drop, false);
 	}
 }
 
-function preventDefaults(e) {
+function prevent_defaults(e) {
 	e.preventDefault();
 	e.stopPropagation();
 }
 
 function highlight(e) {
-	const fileLabel = document.querySelector('.file-input-label');
-	if (fileLabel) {
-		fileLabel.style.borderColor = '#00a0c8';
-		fileLabel.style.background = '#333';
+	const file_label = document.querySelector('.file-input-label');
+	if (file_label) {
+		file_label.style.borderColor = '#00a0c8';
+		file_label.style.background = '#333';
 	}
 }
 
 function unhighlight(e) {
-	const fileLabel = document.querySelector('.file-input-label');
-	if (fileLabel) {
-		fileLabel.style.borderColor = '#444';
-		fileLabel.style.background = '#2a2a2a';
+	const file_label = document.querySelector('.file-input-label');
+	if (file_label) {
+		file_label.style.borderColor = '#444';
+		file_label.style.background = '#2a2a2a';
 	}
 }
 
-function handleDrop(e) {
+function handle_drop(e) {
 	const dt = e.dataTransfer;
 	const files = dt.files;
-	handleFiles(files);
+	handle_files(files);
 }
 
-function handleFileSelect(e) {
+function handle_file_select(e) {
 	const files = e.target.files;
-	handleFiles(files);
+	handle_files(files);
 }
 
-async function handleFiles(files) {
+async function handle_files(files) {
 	for (let file of files) {
 		if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-			await loadExcelFile(file);
+			await load_excel_file(file);
 		} else {
-			showError(`${file.name} is not an Excel file`);
+			show_error(`${file.name} is not an Excel file`);
 		}
 	}
 }
 
-async function loadExcelFile(file, fromServer = false, serverPath = null) {
-	console.log(`Loading file: ${file.name}${fromServer ? ' (from server)' : ' (local)'}`);
+async function load_excel_file(file, from_server = false, server_path = null) {
+	console.log(`Loading file: ${file.name}${from_server ? ' (from server)' : ' (local)'}`);
 	try {
-		const arrayBuffer = await file.arrayBuffer();
-		const workbook = XLSX.read(arrayBuffer, {
+		const array_buffer = await file.arrayBuffer();
+		const workbook = XLSX.read(array_buffer, {
 			cellDates: true,
 			cellNF: true,
 			cellStyles: true
 		});
 
 		// Extract device information
-		const deviceInfo = extractDeviceInfo(workbook);
+		const device_info = extract_device_info(workbook);
 
 		// Extract RvR data
-		const rvrResult = extractRvRData(workbook);
-		const rvrData = rvrResult.tests;
-		const skippedCount = rvrResult.skippedCount;
+		const rvrResult = extract_rvr_data(workbook);
+		const rvr_data = rvrResult.tests;
+		const skipped_count = rvrResult.skipped_count;
 
-		if (rvrData.length === 0) {
+		if (rvr_data.length === 0) {
 			console.error(`No RvR data found in ${file.name}`);
 			console.log('Available sheets:', workbook.SheetNames);
-			showError(`No RvR data found in ${file.name}. Please ensure the file contains "Rate vs Range" sheets with Attenuation and Throughput columns.`);
+			show_error(`No RvR data found in ${file.name}. Please ensure the file contains "Rate vs Range" sheets with Attenuation and Throughput columns.`);
 			return;
 		}
 
 		// Add server path information to each test if loaded from server
-		if (fromServer && serverPath) {
-			rvrData.forEach(test => {
-				test.serverPath = serverPath;
+		if (from_server && server_path) {
+			rvr_data.forEach(test => {
+				test.server_path = server_path;
 			});
 		}
 
 		// Store the loaded file data
-		loadedFiles.set(file.name, {
-			deviceInfo: deviceInfo,
-			rvrData: rvrData,
-			fileName: file.name,
-			fromServer: fromServer,
-			serverPath: serverPath
+		loaded_files.set(file.name, {
+			device_info: device_info,
+			rvr_data: rvr_data,
+			file_name: file.name,
+			from_server: from_server,
+			server_path: server_path
 		});
 
 		// Only update UI if not in batch loading mode
-		if (!isBatchLoading) {
-			updateFileList();
-			updateTestOptions();
+		if (!is_batch_loading) {
+			update_file_list();
+			update_test_options();
 
 			// Show success message with data summary
-			const totalDataPoints = rvrData.reduce((sum, test) => sum + test.data.length, 0);
-			console.log(`Successfully loaded ${file.name}: ${rvrData.length} test configurations, ${totalDataPoints} data points`);
+			const total_data_points = rvr_data.reduce((sum, test) => sum + test.data.length, 0);
+			console.log(`Successfully loaded ${file.name}: ${rvr_data.length} test configurations, ${total_data_points} data points`);
 
 			// Show brief success notification
-			showSuccess(`Loaded ${file.name} - ${rvrData.length} test configurations`);
+			show_success(`Loaded ${file.name} - ${rvr_data.length} test configurations`);
 		}
 
 	} catch (error) {
 		console.error('Error loading Excel file:', error);
-		showError(`Failed to load ${file.name}: ${error.message}`);
+		show_error(`Failed to load ${file.name}: ${error.message}`);
 	}
 }
 
-function extractDeviceInfo(workbook) {
+function extract_device_info(workbook) {
 	const info = {};
 
 	// Try to find Device Under Test Information sheet
-	const dutSheet = workbook.Sheets['Device Under Test Information'] ||
+	const dut_sheet = workbook.Sheets['Device Under Test Information'] ||
 				   workbook.Sheets['DUT Information'] ||
 				   workbook.Sheets['Device Info'];
 
-	if (dutSheet) {
-		const data = XLSX.utils.sheet_to_json(dutSheet, { header: 1 });
+	if (dut_sheet) {
+		const data = XLSX.utils.sheet_to_json(dut_sheet, { header: 1 });
 
 		// Convert to key-value pairs
 		data.forEach(row => {
@@ -679,22 +679,22 @@ function extractDeviceInfo(workbook) {
 	return info;
 }
 
-function extractRvRData(workbook) {
+function extract_rvr_data(workbook) {
 	const tests = [];
-	let totalSkipped = 0;
+	let total_skipped = 0;
 
 	// Look for Rate vs Range sheets
-	workbook.SheetNames.forEach(sheetName => {
-		if (sheetName.toLowerCase().includes('rate') &&
-			sheetName.toLowerCase().includes('range')) {
+	workbook.SheetNames.forEach(sheet_name => {
+		if (sheet_name.toLowerCase().includes('rate') &&
+			sheet_name.toLowerCase().includes('range')) {
 
-			console.log(`Processing sheet: ${sheetName}`);
+			console.log(`Processing sheet: ${sheet_name}`);
 
-			const sheet = workbook.Sheets[sheetName];
+			const sheet = workbook.Sheets[sheet_name];
 			const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
 			// Find header row
-			let headerRow = -1;
+			let header_row = -1;
 			for (let i = 0; i < data.length; i++) {
 				const row = data[i];
 				if (row && row.length > 0) {
@@ -707,32 +707,32 @@ function extractRvRData(workbook) {
 					);
 
 					if (hasAttenuation && hasThroughput) {
-						headerRow = i;
+						header_row = i;
 						break;
 					}
 				}
 			}
 
-			if (headerRow === -1) {
-				console.error(`No header row found in sheet: ${sheetName}`);
+			if (header_row === -1) {
+				console.error(`No header row found in sheet: ${sheet_name}`);
 				console.log('First 10 rows:', data.slice(0, 10));
 				return;
 			}
 
-			console.log(`Found header row at index ${headerRow}`);
-			const headers = data[headerRow];
+			console.log(`Found header row at index ${header_row}`);
+			const headers = data[header_row];
 
 			// Find column indices using partial matching
-			const findColumnIndex = (headers, searchTerm) => {
+			const findColumnIndex = (headers, search_term) => {
 				// First try exact match (case insensitive)
 				let index = headers.findIndex(header =>
-					header && header.toString().toLowerCase() === searchTerm.toLowerCase()
+					header && header.toString().toLowerCase() === search_term.toLowerCase()
 				);
 
 				// If not found, try partial match
 				if (index === -1) {
 					index = headers.findIndex(header =>
-						header && header.toString().toLowerCase().includes(searchTerm.toLowerCase())
+						header && header.toString().toLowerCase().includes(search_term.toLowerCase())
 					);
 				}
 
@@ -807,18 +807,18 @@ function extractRvRData(workbook) {
 
 			// Validate required columns
 			if (attIndex === -1 || throughputIndex === -1) {
-				console.error('Missing required columns in sheet:', sheetName);
+				console.error('Missing required columns in sheet:', sheet_name);
 				return;
 			}
 
 			// Group data by test configuration
 			const testGroups = new Map();
-			let skippedCount = 0;
+			let skipped_count = 0;
 
 			// First pass: collect all data points
 			const allDataPoints = [];
 
-			for (let i = headerRow + 1; i < data.length; i++) {
+			for (let i = header_row + 1; i < data.length; i++) {
 				const row = data[i];
 				if (!row || row[attIndex] === undefined || row[throughputIndex] === undefined) continue;
 
@@ -847,7 +847,7 @@ function extractRvRData(workbook) {
 				// Skip invalid data points (channel 0 or throughput 0)
 				if (channel === 0 || throughput === 0) {
 					console.log(`Skipping invalid data point: channel=${channel}, throughput=${throughput}, attenuation=${attenuation}`);
-					skippedCount++;
+					skipped_count++;
 					continue;
 				}
 
@@ -931,7 +931,7 @@ function extractRvRData(workbook) {
 					nss: cleanNss,
 					security,
 					direction,
-					band: determineBand(frequency),
+					band: determine_band(frequency),
 					// Config values for test identification
 					configBandwidth: cleanConfigBandwidth,
 					configNss: cleanConfigNss,
@@ -976,7 +976,7 @@ function extractRvRData(workbook) {
 						nss: baselinePoint.configNss,
 						security: point.security,
 						mode: baselinePoint.configMode,
-						sheetName: sheetName,
+						sheet_name: sheet_name,
 						data: []
 					};
 
@@ -1011,19 +1011,19 @@ function extractRvRData(workbook) {
 				}
 			});
 
-			console.log(`Found ${tests.length} valid test configurations in ${sheetName}`);
-			if (skippedCount > 0) {
-				console.log(`Filtered out ${skippedCount} invalid data points (channel=0 or throughput=0)`);
-				totalSkipped += skippedCount;
+			console.log(`Found ${tests.length} valid test configurations in ${sheet_name}`);
+			if (skipped_count > 0) {
+				console.log(`Filtered out ${skipped_count} invalid data points (channel=0 or throughput=0)`);
+				total_skipped += skipped_count;
 			}
 		}
 	});
 
 	console.log(`Total tests found: ${tests.length}`);
-	return { tests, skippedCount: totalSkipped };
+	return { tests, skipped_count: total_skipped };
 }
 
-function updateFileList() {
+function update_file_list() {
 	const fileList = document.getElementById('fileList');
 	const fileItems = document.getElementById('fileItems');
 	const fileCount = document.getElementById('fileCount');
@@ -1035,26 +1035,26 @@ function updateFileList() {
 	let serverCount = 0;
 	let localCount = 0;
 
-	loadedFiles.forEach(data => {
-		uniqueDevices.add(data.deviceInfo?.Name || data.fileName);
-		if (data.fromServer) {
+	loaded_files.forEach(data => {
+		uniqueDevices.add(data.device_info?.Name || data.file_name);
+		if (data.from_server) {
 			serverCount++;
 		} else {
 			localCount++;
 		}
 	});
 
-	let countText = `${loadedFiles.size} file${loadedFiles.size !== 1 ? 's' : ''} from ${uniqueDevices.size} device${uniqueDevices.size !== 1 ? 's' : ''}`;
-	if (loadedFiles.size > 0) {
+	let countText = `${loaded_files.size} file${loaded_files.size !== 1 ? 's' : ''} from ${uniqueDevices.size} device${uniqueDevices.size !== 1 ? 's' : ''}`;
+	if (loaded_files.size > 0) {
 		countText += ` (${serverCount} server, ${localCount} local)`;
 	}
 	fileCount.textContent = countText;
 
 	// Group files by device model
 	const modelGroups = new Map();
-	loadedFiles.forEach((data, fileName) => {
-		const deviceName = data.deviceInfo?.Name || 'Unknown Device';
-		const model = data.deviceInfo?.['Model Number'] || 'Unknown Model';
+	loaded_files.forEach((data, file_name) => {
+		const deviceName = data.device_info?.Name || 'Unknown Device';
+		const model = data.device_info?.['Model Number'] || 'Unknown Model';
 		const modelKey = `${deviceName}|${model}`;
 
 		if (!modelGroups.has(modelKey)) {
@@ -1070,15 +1070,15 @@ function updateFileList() {
 		}
 
 		const group = modelGroups.get(modelKey);
-		group.files.push({ fileName, data });
-		group.totalTests += data.rvrData.length;
-		if (data.fromServer) {
+		group.files.push({ file_name, data });
+		group.totalTests += data.rvr_data.length;
+		if (data.from_server) {
 			group.serverFiles++;
 		} else {
 			group.localFiles++;
 		}
 
-		const version = data.deviceInfo?.['Software Version'];
+		const version = data.device_info?.['Software Version'];
 		if (version) {
 			group.versions.add(version);
 		}
@@ -1125,20 +1125,20 @@ function updateFileList() {
 		fileItems.appendChild(item);
 	});
 
-	fileList.style.display = loadedFiles.size > 0 ? 'block' : 'none';
+	fileList.style.display = loaded_files.size > 0 ? 'block' : 'none';
 }
 
-function removeFile(fileName) {
-	loadedFiles.delete(fileName);
-	updateFileList();
-	updateTestOptions();
+function removeFile(file_name) {
+	loaded_files.delete(file_name);
+	update_file_list();
+	update_test_options();
 }
 
 function clearAllFiles() {
-	if (loadedFiles.size > 0 && confirm('Remove all loaded files?')) {
-		loadedFiles.clear();
-		updateFileList();
-		updateTestOptions();
+	if (loaded_files.size > 0 && confirm('Remove all loaded files?')) {
+		loaded_files.clear();
+		update_file_list();
+		update_test_options();
 		document.querySelector('.chart-container').style.display = 'none';
 		document.querySelector('.stats-panel').style.display = 'none';
 		document.querySelector('#comparisonPanel').style.display = 'none';
@@ -1147,14 +1147,14 @@ function clearAllFiles() {
 	}
 }
 
-function clearServerFiles() {
-	const serverFiles = Array.from(loadedFiles.entries()).filter(([_, data]) => data.fromServer);
+function clear_server_files() {
+	const serverFiles = Array.from(loaded_files.entries()).filter(([_, data]) => data.from_server);
 	if (serverFiles.length > 0 && confirm(`Remove ${serverFiles.length} server files?`)) {
-		serverFiles.forEach(([fileName, _]) => {
-			loadedFiles.delete(fileName);
+		serverFiles.forEach(([file_name, _]) => {
+			loaded_files.delete(file_name);
 		});
-		updateFileList();
-		updateTestOptions();
+		update_file_list();
+		update_test_options();
 	}
 }
 
@@ -1164,43 +1164,43 @@ function clearDeviceModel(modelKey) {
 
 	// Find all files for this device/model combination
 	const filesToRemove = [];
-	loadedFiles.forEach((data, fileName) => {
-		const fileDeviceName = data.deviceInfo?.Name || 'Unknown Device';
-		const fileModel = data.deviceInfo?.['Model Number'] || 'Unknown Model';
+	loaded_files.forEach((data, file_name) => {
+		const fileDeviceName = data.device_info?.Name || 'Unknown Device';
+		const fileModel = data.device_info?.['Model Number'] || 'Unknown Model';
 		const fileModelKey = `${fileDeviceName}|${fileModel}`;
 
 		if (fileModelKey === modelKey) {
-			filesToRemove.push(fileName);
+			filesToRemove.push(file_name);
 		}
 	});
 
 	if (filesToRemove.length > 0 && confirm(`Remove all files for ${deviceName}?`)) {
-		filesToRemove.forEach(fileName => {
-			loadedFiles.delete(fileName);
+		filesToRemove.forEach(file_name => {
+			loaded_files.delete(file_name);
 		});
-		updateFileList();
-		updateTestOptions();
+		update_file_list();
+		update_test_options();
 	}
 }
 
-function clearLocalFiles() {
-	const localFiles = Array.from(loadedFiles.entries()).filter(([_, data]) => !data.fromServer);
+function clear_local_files() {
+	const localFiles = Array.from(loaded_files.entries()).filter(([_, data]) => !data.from_server);
 	if (localFiles.length > 0 && confirm(`Remove ${localFiles.length} local files?`)) {
-		localFiles.forEach(([fileName, _]) => {
-			loadedFiles.delete(fileName);
+		localFiles.forEach(([file_name, _]) => {
+			loaded_files.delete(file_name);
 		});
-		updateFileList();
-		updateTestOptions();
+		update_file_list();
+		update_test_options();
 		// Reset file input
 		document.getElementById('excelFile').value = '';
 	}
 }
 
-function updateTestOptions() {
+function update_test_options() {
 	const container = document.getElementById('testOptions');
 	container.innerHTML = '';
 
-	if (loadedFiles.size === 0) {
+	if (loaded_files.size === 0) {
 		document.querySelector('.test-selector').style.display = 'none';
 		return;
 	}
@@ -1210,31 +1210,31 @@ function updateTestOptions() {
 	// Group all tests by device name (not filename)
 	const deviceGroups = new Map();
 
-	loadedFiles.forEach((fileData, fileName) => {
-		const deviceName = fileData.deviceInfo?.Name || fileName.split('_')[0] || 'Unknown Device';
+	loaded_files.forEach((fileData, file_name) => {
+		const deviceName = fileData.device_info?.Name || file_name.split('_')[0] || 'Unknown Device';
 
-		console.log(`Processing file: ${fileName}, Device name: ${deviceName}`);
+		console.log(`Processing file: ${file_name}, Device name: ${deviceName}`);
 
 		if (!deviceGroups.has(deviceName)) {
 			deviceGroups.set(deviceName, {
 				files: [],
 				tests: [],
-				deviceInfo: fileData.deviceInfo
+				device_info: fileData.device_info
 			});
 		}
 
 		const deviceGroup = deviceGroups.get(deviceName);
-		deviceGroup.files.push(fileName);
+		deviceGroup.files.push(file_name);
 
 		// Add all tests from this file to the device group
-		fileData.rvrData.forEach(test => {
-			console.log(`Adding test: ${test.name} from ${fileName} to device ${deviceName}`);
+		fileData.rvr_data.forEach(test => {
+			console.log(`Adding test: ${test.name} from ${file_name} to device ${deviceName}`);
 			deviceGroup.tests.push({
 				...test,
-				fileName: fileName,
-				deviceInfo: fileData.deviceInfo,
-				fromServer: fileData.fromServer,
-				serverPath: test.serverPath // Preserve server path for download URLs
+				file_name: file_name,
+				device_info: fileData.device_info,
+				from_server: fileData.from_server,
+				server_path: test.server_path // Preserve server path for download URLs
 			});
 		});
 	});
@@ -1254,9 +1254,9 @@ function updateTestOptions() {
 	const quickActions = document.createElement('div');
 	quickActions.style.marginBottom = '20px';
 	quickActions.innerHTML = `
-		<button class="btn-small" onclick="selectAllTests()">Select All</button>
+		<button class="btn-small" onclick="select_all_tests()">Select All</button>
 		<button class="btn-small" onclick="selectNoneTests()">Clear All</button>
-		<button class="btn-small" onclick="selectMatchingTests()">Select Matching</button>
+		<button class="btn-small" onclick="select_matching_tests()">Select Matching</button>
 	`;
 	container.appendChild(quickActions);
 
@@ -1272,10 +1272,10 @@ function updateTestOptions() {
 		const deviceHeader = document.createElement('div');
 		deviceHeader.className = 'device-group-header';
 
-		const model = deviceGroup.deviceInfo?.['Model Number'] || '';
+		const model = deviceGroup.device_info?.['Model Number'] || '';
 		const versions = new Set();
 		deviceGroup.tests.forEach(test => {
-			const version = test.deviceInfo?.['Software Version'];
+			const version = test.device_info?.['Software Version'];
 			if (version) versions.add(version);
 		});
 
@@ -1392,7 +1392,7 @@ function createTestTable(tests, deviceName, startIndex) {
 		checkbox.type = 'checkbox';
 		checkbox.className = 'test-checkbox';
 		checkbox.id = `test-${testIndex}`;
-		checkbox.value = `${test.fileName}|${test.name}`;
+		checkbox.value = `${test.file_name}|${test.name}`;
 		checkbox.setAttribute('data-devicename', deviceName);
 		checkbox.addEventListener('change', updateChart);
 		checkboxCell.appendChild(checkbox);
@@ -1407,7 +1407,7 @@ function createTestTable(tests, deviceName, startIndex) {
 
 		// Channel cell with 6G conversion
 		const channelCell = document.createElement('td');
-		channelCell.textContent = getChannelDisplay(test.channel, test.band);
+		channelCell.textContent = get_channel_display(test.channel, test.band);
 		channelCell.style.fontWeight = '700';
 		channelCell.style.color = '#e0e0e0';
 		row.appendChild(channelCell);
@@ -1436,7 +1436,7 @@ function createTestTable(tests, deviceName, startIndex) {
 		// Version cell
 		const versionCell = document.createElement('td');
 		versionCell.className = 'version-cell';
-		const version = test.deviceInfo?.['Software Version'] || 'Unknown';
+		const version = test.device_info?.['Software Version'] || 'Unknown';
 		versionCell.textContent = `v${version}`;
 		row.appendChild(versionCell);
 
@@ -1445,15 +1445,15 @@ function createTestTable(tests, deviceName, startIndex) {
 		fileCell.className = 'file-cell';
 		fileCell.style.textAlign = 'left';
 
-		if (test.fromServer && test.serverPath) {
+		if (test.from_server && test.server_path) {
 			// Use the original server path to construct download URLs
-			const serverPath = test.serverPath;
+			const server_path = test.server_path;
 
 			// For Excel: use the exact path the file was loaded from
-			const excelPath = `/reports/${serverPath}`;
+			const excelPath = `/reports/${server_path}`;
 
 			// For PDF: use the new API endpoint that finds the PDF with wildcard matching
-			const pdfPath = `/api/pdf/${serverPath}`;
+			const pdfPath = `/api/pdf/${server_path}`;
 
 			fileCell.innerHTML = `
 				<a href="${excelPath}" download title="Download Excel Report" style="margin-right: 8px; color: #00a0c8; text-decoration: none;">
@@ -1512,7 +1512,7 @@ window.selectNoneDevice = function(deviceName) {
 	updateChart();
 };
 
-window.selectAllTests = function() {
+window.select_all_tests = function() {
 	const checkboxes = document.querySelectorAll('.test-checkbox');
 	checkboxes.forEach(cb => cb.checked = true);
 	updateChart();
@@ -1524,7 +1524,7 @@ window.selectNoneTests = function() {
 	updateChart();
 };
 
-window.clearChartSelection = function() {
+window.clear_chart_selection = function() {
 	// Clear all test selections
 	const checkboxes = document.querySelectorAll('.test-checkbox');
 	checkboxes.forEach(cb => cb.checked = false);
@@ -1535,10 +1535,10 @@ window.clearChartSelection = function() {
 	document.querySelector('#comparisonPanel').style.display = 'none';
 
 	// Show a success notification
-	showSuccess('All test selections cleared');
+	show_success('All test selections cleared');
 };
 
-window.selectMatchingTests = function() {
+window.select_matching_tests = function() {
 	// Select one test from each device that has the same configuration
 	const checkboxes = document.querySelectorAll('.test-checkbox');
 
@@ -1548,11 +1548,11 @@ window.selectMatchingTests = function() {
 	// Group by configuration
 	const configMap = new Map();
 	checkboxes.forEach(cb => {
-		const [fileName, testName] = cb.value.split('|');
+		const [file_name, test_name] = cb.value.split('|');
 		const deviceName = cb.getAttribute('data-devicename');
 
-		// Extract config from testName (remove device-specific parts)
-		const configMatch = testName.match(/(DUT-[TR]X)_CH(\d+)_(\d+MHz)_(\d+SS)_(\w+)/);
+		// Extract config from test_name (remove device-specific parts)
+		const configMatch = test_name.match(/(DUT-[TR]X)_CH(\d+)_(\d+MHz)_(\d+SS)_(\w+)/);
 		if (configMatch) {
 			const configKey = configMatch[0];
 			if (!configMap.has(configKey)) {
@@ -1579,29 +1579,29 @@ function formatTestName(test) {
 	// Format test name based on baseline (attenuation 0) configuration
 	// Include indicator if this is using TX-specific parameters
 	const prefix = test.direction && test.direction.includes('TX') ? '' : '';
-	const displayChannel = formatChannelNumber(test.channel, test.band);
+	const displayChannel = format_channel_number(test.channel, test.band);
 	return `${test.band || 'UNK'} CH${displayChannel} ${test.bandwidth}MHz ${test.nss}SS ${test.mode}`;
 }
 
 function updateChart() {
-	const selectedTests = [];
+	const selected_tests = [];
 	const checkboxes = document.querySelectorAll('.test-checkbox:checked');
 
 	checkboxes.forEach(cb => {
-		const [fileName, testName] = cb.value.split('|');
-		const fileData = loadedFiles.get(fileName);
-		const test = fileData.rvrData.find(t => t.name === testName);
+		const [file_name, test_name] = cb.value.split('|');
+		const fileData = loaded_files.get(file_name);
+		const test = fileData.rvr_data.find(t => t.name === test_name);
 
 		if (test) {
-			selectedTests.push({
+			selected_tests.push({
 				...test,
-				fileName: fileName,
-				deviceInfo: fileData.deviceInfo
+				file_name: file_name,
+				device_info: fileData.device_info
 			});
 		}
 	});
 
-	if (selectedTests.length === 0) {
+	if (selected_tests.length === 0) {
 		document.querySelector('.chart-container').style.display = 'none';
 		document.querySelector('.stats-panel').style.display = 'none';
 		document.querySelector('#comparisonPanel').style.display = 'none';
@@ -1611,25 +1611,25 @@ function updateChart() {
 	document.querySelector('.chart-container').style.display = 'block';
 	document.querySelector('.stats-panel').style.display = 'block';
 
-	drawChart(selectedTests);
-	updateStats(selectedTests);
+	drawChart(selected_tests);
+	updateStats(selected_tests);
 
 	// Show comparison panel if comparing multiple devices
-	const uniqueDevices = new Set(selectedTests.map(t => t.deviceInfo?.Name || t.fileName));
+	const uniqueDevices = new Set(selected_tests.map(t => t.device_info?.Name || t.file_name));
 	if (uniqueDevices.size > 1) {
 		document.querySelector('#comparisonPanel').style.display = 'block';
-		updateComparisonTable(selectedTests);
+		updateComparisonTable(selected_tests);
 	} else {
 		document.querySelector('#comparisonPanel').style.display = 'none';
 	}
 }
 
 // Updated chart drawing function with unique colors for each test configuration
-function drawChart(selectedTests) {
+function drawChart(selected_tests) {
 	const ctx = document.getElementById('rvrChart').getContext('2d');
 
-	if (chartInstance) {
-		chartInstance.destroy();
+	if (chart_instance) {
+		chart_instance.destroy();
 	}
 
 	// Define expanded color palette for different test configurations
@@ -1648,11 +1648,11 @@ function drawChart(selectedTests) {
 
 	// First pass: identify unique device + test configuration + software version combinations
 	const uniqueConfigs = new Set();
-	selectedTests.forEach(test => {
-		const deviceName = test.deviceInfo?.Name || test.fileName;
-		const softwareVersion = test.deviceInfo?.['Software Version'] || '';
-		const testConfig = formatTestName(test);
-		const configKey = `${deviceName}|${softwareVersion}|${testConfig}`;
+	selected_tests.forEach(test => {
+		const deviceName = test.device_info?.Name || test.file_name;
+		const softwareVersion = test.device_info?.['Software Version'] || '';
+		const test_config = formatTestName(test);
+		const configKey = `${deviceName}|${softwareVersion}|${test_config}`;
 		uniqueConfigs.add(configKey);
 	});
 
@@ -1669,9 +1669,9 @@ function drawChart(selectedTests) {
 
 	// Group tests by DUT model to assign point styles
 	const modelGroups = new Map();
-	selectedTests.forEach(test => {
-		const deviceName = test.deviceInfo?.Name || test.fileName;
-		const modelNumber = test.deviceInfo?.['Model Number'] || '';
+	selected_tests.forEach(test => {
+		const deviceName = test.device_info?.Name || test.file_name;
+		const modelNumber = test.device_info?.['Model Number'] || '';
 		const modelKey = `${deviceName}|${modelNumber}`;
 
 		if (!modelGroups.has(modelKey)) {
@@ -1687,9 +1687,9 @@ function drawChart(selectedTests) {
 			// Group tests by configuration (excluding direction) to pair TX/RX
 			const configGroups = new Map();
 			tests.forEach(test => {
-				const softwareVersion = test.deviceInfo?.['Software Version'] || '';
-				const testConfig = formatTestName(test);
-				const configKey = `${softwareVersion}|${testConfig}`;
+				const softwareVersion = test.device_info?.['Software Version'] || '';
+				const test_config = formatTestName(test);
+				const configKey = `${softwareVersion}|${test_config}`;
 
 				if (!configGroups.has(configKey)) {
 					configGroups.set(configKey, []);
@@ -1704,7 +1704,7 @@ function drawChart(selectedTests) {
 
 				// Apply the same point style to all tests in this configuration (TX and RX)
 				configTests.forEach(test => {
-					const softwareVersion = test.deviceInfo?.['Software Version'] || '';
+					const softwareVersion = test.device_info?.['Software Version'] || '';
 					const testKey = `${modelKey}|${softwareVersion}|${formatTestName(test)}|${test.direction}`;
 					modelStyleMap.set(testKey, pointStyle);
 				});
@@ -1714,27 +1714,27 @@ function drawChart(selectedTests) {
 		} else {
 			// Single test for this model gets default circle style
 			const test = tests[0];
-			const softwareVersion = test.deviceInfo?.['Software Version'] || '';
+			const softwareVersion = test.device_info?.['Software Version'] || '';
 			const testKey = `${modelKey}|${softwareVersion}|${formatTestName(test)}|${test.direction}`;
 			modelStyleMap.set(testKey, 'circle');
 		}
 	});
 
-	const datasets = selectedTests.map((test, index) => {
-		const deviceName = test.deviceInfo?.Name || test.fileName;
-		const softwareVersion = test.deviceInfo?.['Software Version'] || '';
-		const modelNumber = test.deviceInfo?.['Model Number'] || '';
-		const testConfig = formatTestName(test);
-		const configKey = `${deviceName}|${softwareVersion}|${testConfig}`;
+	const datasets = selected_tests.map((test, index) => {
+		const deviceName = test.device_info?.Name || test.file_name;
+		const softwareVersion = test.device_info?.['Software Version'] || '';
+		const modelNumber = test.device_info?.['Model Number'] || '';
+		const test_config = formatTestName(test);
+		const configKey = `${deviceName}|${softwareVersion}|${test_config}`;
 		const baseColor = configColorMap.get(configKey);
 
 		// Get point style for this test
 		const modelKey = `${deviceName}|${modelNumber}`;
-		const testKey = `${modelKey}|${softwareVersion}|${testConfig}|${test.direction}`;
+		const testKey = `${modelKey}|${softwareVersion}|${test_config}|${test.direction}`;
 		const pointStyle = modelStyleMap.get(testKey) || 'circle';
 
 		// Create detailed label based on attenuation 0 data (or first available)
-		const label = `${deviceName} ${softwareVersion ? `v${softwareVersion}` : ''} - ${testConfig} ${test.direction}`;
+		const label = `${deviceName} ${softwareVersion ? `v${softwareVersion}` : ''} - ${test_config} ${test.direction}`;
 
 		// Determine line style based on direction
 		let borderDash = [];
@@ -1763,14 +1763,14 @@ function drawChart(selectedTests) {
 			borderDash: borderDash,
 			// Add custom properties for grouping
 			deviceName: deviceName,
-			testConfig: testConfig,
+			test_config: test_config,
 			// Store reference to the full test for tooltip access
 			fullTest: test
 		};
 	});
 
-	chartInstance = new Chart(ctx, {
-		type: chartType,
+	chart_instance = new Chart(ctx, {
+		type: chart_type,
 		data: {
 			datasets: datasets
 		},
@@ -1794,7 +1794,7 @@ function drawChart(selectedTests) {
 				},
 				subtitle: {
 					display: true,
-					text: `Comparing ${uniqueConfigs.size} test configuration(s) across ${Array.from(new Set(selectedTests.map(t => t.deviceInfo?.Name || t.fileName))).length} device(s) | Solid: TX, Dotted: RX | Different point styles for multiple tests per DUT model`,
+					text: `Comparing ${uniqueConfigs.size} test configuration(s) across ${Array.from(new Set(selected_tests.map(t => t.device_info?.Name || t.file_name))).length} device(s) | Solid: TX, Dotted: RX | Different point styles for multiple tests per DUT model`,
 					color: '#aaa',
 					font: {
 						size: 14,
@@ -1865,7 +1865,7 @@ function drawChart(selectedTests) {
 
 								// Show actual PHY parameters at this attenuation level
 								if (point.band || point.channel) {
-									const displayChannel = formatChannelNumber(point.channel || fullTest.channel, point.band || fullTest.band);
+									const displayChannel = format_channel_number(point.channel || fullTest.channel, point.band || fullTest.band);
 									lines.push(` Band: ${point.band || fullTest.band || 'UNK'} | Channel: ${displayChannel}`);
 								}
 
@@ -1981,7 +1981,7 @@ function drawChart(selectedTests) {
 	});
 }
 
-function updateStats(selectedTests) {
+function updateStats(selected_tests) {
 	const statsGrid = document.getElementById('statsGrid');
 	statsGrid.innerHTML = '';
 
@@ -1990,41 +1990,41 @@ function updateStats(selectedTests) {
 	let bestAvgRate = 0;
 	let bestRange = 0;
 
-	const testStats = selectedTests.map(test => {
+	const testStats = selected_tests.map(test => {
 		const throughputs = test.data.map(d => d.throughput).filter(t => t > 0);
 		const maxRate = Math.max(...throughputs);
 		const avgRate = Math.round(throughputs.reduce((a, b) => a + b, 0) / throughputs.length);
 
 		// Find effective range (last attenuation with throughput > 10 Mbps)
-		let effectiveRange = 0;
+		let effective_range = 0;
 		for (let i = test.data.length - 1; i >= 0; i--) {
 			if (test.data[i].throughput > 10) {
-				effectiveRange = test.data[i].attenuation;
+				effective_range = test.data[i].attenuation;
 				break;
 			}
 		}
 
 		bestMaxRate = Math.max(bestMaxRate, maxRate);
 		bestAvgRate = Math.max(bestAvgRate, avgRate);
-		bestRange = Math.max(bestRange, effectiveRange);
+		bestRange = Math.max(bestRange, effective_range);
 
-		return { test, maxRate, avgRate, effectiveRange };
+		return { test, maxRate, avgRate, effective_range };
 	});
 
 	// Create stat cards
-	testStats.forEach(({ test, maxRate, avgRate, effectiveRange }) => {
+	testStats.forEach(({ test, maxRate, avgRate, effective_range }) => {
 		const card = document.createElement('div');
 		card.className = 'stat-card';
 
-		const isBestMax = maxRate === bestMaxRate && selectedTests.length > 1;
-		const isBestAvg = avgRate === bestAvgRate && selectedTests.length > 1;
-		const isBestRange = effectiveRange === bestRange && selectedTests.length > 1;
+		const isBestMax = maxRate === bestMaxRate && selected_tests.length > 1;
+		const isBestAvg = avgRate === bestAvgRate && selected_tests.length > 1;
+		const isBestRange = effective_range === bestRange && selected_tests.length > 1;
 
 		card.innerHTML = `
 			<h4 style="color: #00a0c8; margin-bottom: 15px;">
-				${test.deviceInfo?.Name || test.fileName}<br>
+				${test.device_info?.Name || test.file_name}<br>
 				<span style="font-size: 0.75em; color: #888;">
-					v${test.deviceInfo?.['Software Version'] || 'Unknown'}
+					v${test.device_info?.['Software Version'] || 'Unknown'}
 				</span><br>
 				<span style="font-size: 0.8em; color: #aaa;">
 					${formatTestName(test)} ${test.direction}
@@ -2040,7 +2040,7 @@ function updateStats(selectedTests) {
 			</div>
 			<div>
 				<div class="stat-label">Effective Range (>10 Mbps) ${isBestRange ? '🏆' : ''}</div>
-				<div class="stat-value">${effectiveRange} dB</div>
+				<div class="stat-value">${effective_range} dB</div>
 			</div>
 		`;
 		statsGrid.appendChild(card);
@@ -2048,25 +2048,25 @@ function updateStats(selectedTests) {
 }
 
 function toggleChartType() {
-	chartType = chartType === 'line' ? 'bar' : 'line';
+	chart_type = chart_type === 'line' ? 'bar' : 'line';
 	updateChart();
 }
 
-function exportChart() {
-	if (!chartInstance) return;
+function export_chart() {
+	if (!chart_instance) return;
 
 	const link = document.createElement('a');
 	link.download = 'wifi-rvr-comparison.png';
-	link.href = chartInstance.toBase64Image();
+	link.href = chart_instance.toBase64Image();
 	link.click();
 }
 
-function updateComparisonTable(selectedTests) {
+function updateComparisonTable(selected_tests) {
 	const container = document.getElementById('comparisonTable');
 
 	// Group tests by configuration
 	const configGroups = new Map();
-	selectedTests.forEach(test => {
+	selected_tests.forEach(test => {
 		const configKey = `${formatTestName(test)} ${test.direction}`;
 		if (!configGroups.has(configKey)) {
 			configGroups.set(configKey, []);
@@ -2104,8 +2104,8 @@ function updateComparisonTable(selectedTests) {
 		const bestRange = Math.max(...ranges);
 
 		tests.forEach((test, index) => {
-			const deviceName = test.deviceInfo?.Name || test.fileName;
-			const softwareVersion = test.deviceInfo?.['Software Version'] || 'Unknown';
+			const deviceName = test.device_info?.Name || test.file_name;
+			const softwareVersion = test.device_info?.['Software Version'] || 'Unknown';
 			const throughputs = test.data.map(d => d.throughput).filter(t => t > 0);
 			const maxRate = Math.max(...throughputs);
 			const avgRate = Math.round(throughputs.reduce((a, b) => a + b, 0) / throughputs.length);
@@ -2137,32 +2137,32 @@ function updateComparisonTable(selectedTests) {
 	container.innerHTML = html;
 }
 
-function exportCSV() {
-	const selectedTests = [];
+function export_csv() {
+	const selected_tests = [];
 	const checkboxes = document.querySelectorAll('.test-checkbox:checked');
 
 	checkboxes.forEach(cb => {
-		const [fileName, testName] = cb.value.split('|');
-		const fileData = loadedFiles.get(fileName);
-		const test = fileData.rvrData.find(t => t.name === testName);
+		const [file_name, test_name] = cb.value.split('|');
+		const fileData = loaded_files.get(file_name);
+		const test = fileData.rvr_data.find(t => t.name === test_name);
 
 		if (test) {
-			selectedTests.push({
+			selected_tests.push({
 				...test,
-				fileName: fileName,
-				deviceInfo: fileData.deviceInfo
+				file_name: file_name,
+				device_info: fileData.device_info
 			});
 		}
 	});
 
-	if (selectedTests.length === 0) return;
+	if (selected_tests.length === 0) return;
 
 	// Create CSV data
 	let csv = 'Device,Model,Software Version,Test Configuration,Direction,Band,Mode (0dB),';
 
 	// Get all unique attenuation values
 	const allAttenuations = new Set();
-	selectedTests.forEach(test => {
+	selected_tests.forEach(test => {
 		test.data.forEach(point => {
 			allAttenuations.add(point.attenuation);
 		});
@@ -2173,10 +2173,10 @@ function exportCSV() {
 	csv += attenuations.map(att => `${att}dB`).join(',') + '\n';
 
 	// Add data rows
-	selectedTests.forEach(test => {
-		const deviceName = test.deviceInfo?.Name || test.fileName;
-		const model = test.deviceInfo?.['Model Number'] || 'Unknown';
-		const version = test.deviceInfo?.['Software Version'] || 'Unknown';
+	selected_tests.forEach(test => {
+		const deviceName = test.device_info?.Name || test.file_name;
+		const model = test.device_info?.['Model Number'] || 'Unknown';
+		const version = test.device_info?.['Software Version'] || 'Unknown';
 		const config = formatTestName(test);
 		const band = test.band || 'UNK';
 		const mode = test.mode || 'Unknown';
@@ -2199,7 +2199,7 @@ function exportCSV() {
 	URL.revokeObjectURL(url);
 }
 
-function showError(message) {
+function show_error(message) {
 	const error = document.createElement('div');
 	error.className = 'error';
 	error.textContent = message;
@@ -2210,11 +2210,11 @@ function showError(message) {
 function calculateNotificationPosition() {
 	let totalOffset = 20; // Initial top margin
 
-	for (let i = 0; i < activeNotifications.length; i++) {
-		const notification = activeNotifications[i];
+	for (let i = 0; i < active_notifications.length; i++) {
+		const notification = active_notifications[i];
 		if (i > 0) {
 			// Add the height of the previous notification plus spacing
-			const prevNotification = activeNotifications[i - 1];
+			const prevNotification = active_notifications[i - 1];
 			const prevHeight = prevNotification.offsetHeight || 50; // Default height if not rendered yet
 			totalOffset += prevHeight + 10; // 10px spacing between notifications
 		}
@@ -2226,13 +2226,13 @@ function calculateNotificationPosition() {
 function repositionNotifications() {
 	let currentTop = 20;
 
-	activeNotifications.forEach((notification, index) => {
+	active_notifications.forEach((notification, index) => {
 		notification.style.top = `${currentTop}px`;
 		currentTop += notification.offsetHeight + 10; // Add height plus spacing
 	});
 }
 
-function showSuccess(message) {
+function show_success(message) {
 	const success = document.createElement('div');
 	const fontFamily = window.QUALIFI_FONT === 'Berkeley Mono' ?
 		"'Berkeley Mono', 'Courier New', monospace" :
@@ -2259,7 +2259,7 @@ function showSuccess(message) {
 	document.body.appendChild(success);
 
 	// Add to active notifications
-	activeNotifications.push(success);
+	active_notifications.push(success);
 
 	// Force layout calculation before positioning
 	success.offsetHeight;
@@ -2277,9 +2277,9 @@ function showSuccess(message) {
 	setTimeout(() => {
 		success.style.opacity = '0';
 		setTimeout(() => {
-			const index = activeNotifications.indexOf(success);
+			const index = active_notifications.indexOf(success);
 			if (index > -1) {
-				activeNotifications.splice(index, 1);
+				active_notifications.splice(index, 1);
 				success.remove();
 
 				// Reposition remaining notifications
