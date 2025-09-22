@@ -777,19 +777,30 @@ function extractRvRData(workbook) {
 			if (rxBwIndex === -1) rxBwIndex = findColumnIndex(headers, 'rx_bw');
 			if (rxBwIndex === -1) rxBwIndex = findColumnIndex(headers, 'rx bandwidth');
 
+			// MCS columns
+			let txMcsIndex = findColumnIndex(headers, 'tx mcs');
+			if (txMcsIndex === -1) txMcsIndex = findColumnIndex(headers, 'txmcs');
+			if (txMcsIndex === -1) txMcsIndex = findColumnIndex(headers, 'tx_mcs');
+
+			let rxMcsIndex = findColumnIndex(headers, 'rx mcs');
+			if (rxMcsIndex === -1) rxMcsIndex = findColumnIndex(headers, 'rxmcs');
+			if (rxMcsIndex === -1) rxMcsIndex = findColumnIndex(headers, 'rx_mcs');
+
 			console.log('Column indices:', {
 				regular: { bw: bwIndex, nss: nssIndex, mode: modeIndex },
-				tx: { txBw: txBwIndex, txNss: txNssIndex, txMode: txModeIndex },
-				rx: { rxBw: rxBwIndex, rxNss: rxNssIndex, rxMode: rxModeIndex },
+				tx: { txBw: txBwIndex, txNss: txNssIndex, txMode: txModeIndex, txMcs: txMcsIndex },
+				rx: { rxBw: rxBwIndex, rxNss: rxNssIndex, rxMode: rxModeIndex, rxMcs: rxMcsIndex },
 				txColumnsFound: {
 					'TX BW': txBwIndex !== -1,
 					'TX NSS': txNssIndex !== -1,
-					'TX Mode': txModeIndex !== -1
+					'TX Mode': txModeIndex !== -1,
+					'TX MCS': txMcsIndex !== -1
 				},
 				rxColumnsFound: {
 					'RX BW': rxBwIndex !== -1,
 					'RX NSS': rxNssIndex !== -1,
-					'RX Mode': rxModeIndex !== -1
+					'RX Mode': rxModeIndex !== -1,
+					'RX MCS': rxMcsIndex !== -1
 				},
 				totalColumns: headers.length
 			});
@@ -846,7 +857,7 @@ function extractRvRData(workbook) {
 				// IMPORTANT: Column names are from test equipment perspective!
 				// DUT-TX = test equipment receives = use Rx columns
 				// DUT-RX = test equipment transmits = use Tx columns
-				let bandwidth, nss, mode;
+				let bandwidth, nss, mode, mcs;
 				const isTxDirection = direction.includes('TX');
 				const isRxDirection = direction.includes('RX');
 
@@ -857,22 +868,48 @@ function extractRvRData(workbook) {
 				const hasRxBw = rxBwIndex !== -1;
 				const hasTxMode = txModeIndex !== -1;
 				const hasRxMode = rxModeIndex !== -1;
+				const hasTxMcs = txMcsIndex !== -1;
+				const hasRxMcs = rxMcsIndex !== -1;
 
+				// Test configuration identification uses configured parameters (NSS, BW) + appropriate mode
+				let configBandwidth, configNss, configMode;
+				if (isTxDirection) {
+					// For DUT-TX direction, use configured test parameters and RX mode
+					configBandwidth = row[bwIndex] || 'Unknown';
+					configNss = row[nssIndex] || 'Unknown';
+					configMode = hasRxMode ? row[rxModeIndex] : row[modeIndex] || 'Unknown';
+				} else if (isRxDirection) {
+					// For DUT-RX direction, use configured test parameters and TX mode
+					configBandwidth = row[bwIndex] || 'Unknown';
+					configNss = row[nssIndex] || 'Unknown';
+					configMode = hasTxMode ? row[txModeIndex] : row[modeIndex] || 'Unknown';
+
+				} else {
+					// Use regular columns as fallback
+					configBandwidth = row[bwIndex] || 'Unknown';
+					configNss = row[nssIndex] || 'Unknown';
+					configMode = row[modeIndex] || 'Unknown';
+				}
+
+				// Plot data uses actual measured values from direction-specific columns
 				if (isTxDirection) {
 					// For DUT-TX direction, use RX columns (test equipment perspective)
 					bandwidth = hasRxBw ? row[rxBwIndex] : row[bwIndex] || 'Unknown';
 					nss = hasRxNss ? row[rxNssIndex] : row[nssIndex] || 'Unknown';
 					mode = hasRxMode ? row[rxModeIndex] : row[modeIndex] || 'Unknown';
+					mcs = hasRxMcs ? row[rxMcsIndex] : 'Unknown';
 				} else if (isRxDirection) {
 					// For DUT-RX direction, use TX columns (test equipment perspective)
 					bandwidth = hasTxBw ? row[txBwIndex] : row[bwIndex] || 'Unknown';
 					nss = hasTxNss ? row[txNssIndex] : row[nssIndex] || 'Unknown';
 					mode = hasTxMode ? row[txModeIndex] : row[modeIndex] || 'Unknown';
+					mcs = hasTxMcs ? row[txMcsIndex] : 'Unknown';
 				} else {
 					// Use regular columns as fallback
 					bandwidth = row[bwIndex] || 'Unknown';
 					nss = row[nssIndex] || 'Unknown';
 					mode = row[modeIndex] || 'Unknown';
+					mcs = 'Unknown';
 				}
 
 				const security = row[securityIndex] || 'Unknown';
@@ -880,19 +917,27 @@ function extractRvRData(workbook) {
 				// Clean up values
 				const cleanBandwidth = bandwidth.toString().replace(/,/g, '');
 				const cleanNss = nss.toString().replace(/,/g, '');
+				const cleanConfigBandwidth = configBandwidth.toString().replace(/,/g, '');
+				const cleanConfigNss = configNss.toString().replace(/,/g, '');
 
 				allDataPoints.push({
 					attenuation,
 					throughput,
 					frequency,
 					mode,
+					mcs,
 					channel,
 					bandwidth: cleanBandwidth,
 					nss: cleanNss,
 					security,
 					direction,
-					band: determineBand(frequency)
+					band: determineBand(frequency),
+					// Config values for test identification
+					configBandwidth: cleanConfigBandwidth,
+					configNss: cleanConfigNss,
+					configMode
 				});
+
 			}
 
 			// Second pass: group by baseline configuration (attenuation 0 or lowest attenuation)
@@ -916,23 +961,27 @@ function extractRvRData(workbook) {
 
 				if (!baselinePoint) return;
 
-				// Create test key based on BASELINE configuration
-				const testKey = `${point.direction}_CH${point.channel}_${baselinePoint.bandwidth}MHz_${baselinePoint.nss}SS_${point.security}`;
+				// Create test key based on BASELINE configuration using config values
+				const testKey = `${point.direction}_CH${point.channel}_${baselinePoint.configBandwidth}MHz_${baselinePoint.configNss}SS_${point.security}`;
+
 
 				if (!testGroups.has(testKey)) {
-					testGroups.set(testKey, {
+					const testObj = {
 						name: testKey,
 						direction: point.direction,
 						channel: point.channel.toString(),
 						frequency: baselinePoint.frequency,
 						band: baselinePoint.band,
-						bandwidth: baselinePoint.bandwidth,
-						nss: baselinePoint.nss,
+						bandwidth: baselinePoint.configBandwidth,
+						nss: baselinePoint.configNss,
 						security: point.security,
-						mode: baselinePoint.mode,
+						mode: baselinePoint.configMode,
 						sheetName: sheetName,
 						data: []
-					});
+					};
+
+
+					testGroups.set(testKey, testObj);
 				}
 
 				const testGroup = testGroups.get(testKey);
@@ -945,17 +994,15 @@ function extractRvRData(workbook) {
 				if (test.data.length > 0) {
 					test.data.sort((a, b) => a.attenuation - b.attenuation);
 
-					// Set mode, bandwidth, and NSS based on the values at attenuation 0 (or closest to 0)
+					// Update mode based on data points (bandwidth and nss already set correctly from config values)
 					const baselinePoint = test.data.find(point => point.attenuation === 0);
 					if (baselinePoint) {
 						test.mode = baselinePoint.mode;
-						test.bandwidth = baselinePoint.bandwidth;
-						test.nss = baselinePoint.nss;
+						// Keep existing bandwidth and nss from config values
 					} else if (test.data.length > 0) {
-						// Use the values from the first (lowest attenuation) data point
+						// Use mode from the first (lowest attenuation) data point
 						test.mode = test.data[0].mode;
-						test.bandwidth = test.data[0].bandwidth;
-						test.nss = test.data[0].nss;
+						// Keep existing bandwidth and nss from config values
 					}
 
 					tests.push(test);
@@ -1373,6 +1420,8 @@ function createTestTable(tests, deviceName, startIndex) {
 
 		// NSS cell
 		const nssCell = document.createElement('td');
+
+
 		nssCell.textContent = `${test.nss}SS`;
 		nssCell.style.color = '#ccc';
 		row.appendChild(nssCell);
@@ -1820,20 +1869,24 @@ function drawChart(selectedTests) {
 									lines.push(` Band: ${point.band || fullTest.band || 'UNK'} | Channel: ${displayChannel}`);
 								}
 
-								// Show bandwidth and spatial streams with TX/RX indicator
+								// Show combined TX/RX parameters on a single line
 								const actualBW = point.bandwidth || fullTest.bandwidth;
 								const actualNSS = point.nss || fullTest.nss;
 								const direction = point.direction || fullTest.direction;
 								const paramType = direction && direction.includes('TX') ? 'TX' :
 										 direction && direction.includes('RX') ? 'RX' : 'PHY';
-								lines.push(` ${paramType} Config: ${actualBW}MHz ${actualNSS}SS`);
 
-								// Show mode and security
-								if (point.mode || point.security) {
-									const direction = point.direction || fullTest.direction;
-									const paramType = direction && direction.includes('TX') ? 'TX' :
-											 direction && direction.includes('RX') ? 'RX' : 'PHY';
-									lines.push(` ${paramType} Mode: ${point.mode || 'Unknown'} | Security: ${point.security || fullTest.security}`);
+								// Build combined mode display: "TX Mode: 20MHz HE MCS11 1SS"
+								let modeDisplay = point.mode || 'Unknown';
+								if (point.mcs && point.mcs !== 'Unknown' && !modeDisplay.includes('OFDM')) {
+									modeDisplay += ` MCS${point.mcs}`;
+								}
+
+								lines.push(` ${paramType} Mode: ${actualBW}MHz ${modeDisplay} ${actualNSS}SS`);
+
+								// Show security on separate line if available
+								if (point.security) {
+									lines.push(` Security: ${point.security || fullTest.security}`);
 								}
 
 								// Show frequency if available
@@ -1841,26 +1894,26 @@ function drawChart(selectedTests) {
 									lines.push(` Frequency: ${point.frequency} MHz`);
 								}
 
-								// Show if parameters have degraded from baseline (attenuation 0 or first point)
+								// Show if parameters have degraded from test configuration
 								if (dataIndex > 0 && fullTest.data && fullTest.data[0]) {
-									const baselinePoint = fullTest.data[0];
 									const degradations = [];
 									const direction = point.direction || fullTest.direction;
 									const paramType = direction && direction.includes('TX') ? 'TX' :
 											 direction && direction.includes('RX') ? 'RX' : 'PHY';
 
-									// Check for NSS degradation
-									if (baselinePoint.nss && point.nss && point.nss !== baselinePoint.nss) {
-										degradations.push(`${paramType} NSS: ${baselinePoint.nss}→${point.nss}`);
+									// Check for NSS degradation against configured values
+									if (fullTest.nss && point.nss && point.nss !== fullTest.nss) {
+										degradations.push(`${paramType} NSS: ${fullTest.nss}→${point.nss}`);
 									}
 
-									// Check for bandwidth degradation
-									if (baselinePoint.bandwidth && point.bandwidth &&
-										parseFloat(point.bandwidth) !== parseFloat(baselinePoint.bandwidth)) {
-										degradations.push(`${paramType} BW: ${baselinePoint.bandwidth}→${point.bandwidth}MHz`);
+									// Check for bandwidth degradation against configured values
+									if (fullTest.bandwidth && point.bandwidth &&
+										parseFloat(point.bandwidth) !== parseFloat(fullTest.bandwidth)) {
+										degradations.push(`${paramType} BW: ${fullTest.bandwidth}→${point.bandwidth}MHz`);
 									}
 
-									// Check for mode change
+									// Check for mode change (still compare against first data point since mode comes from measured data)
+									const baselinePoint = fullTest.data[0];
 									if (baselinePoint.mode && point.mode && point.mode !== baselinePoint.mode) {
 										degradations.push(`${paramType} Mode: ${baselinePoint.mode}→${point.mode}`);
 									}
