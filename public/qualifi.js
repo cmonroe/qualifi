@@ -6,6 +6,208 @@ let server_reports = null;
 let selected_server_reports = new Set();
 let active_notifications = [];
 
+// Touch and responsive detection
+let is_touch_device = false;
+let is_mobile = false;
+
+// Detect touch capability and mobile device
+function detect_device_capabilities() {
+	is_touch_device = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+	is_mobile = window.innerWidth <= 768;
+
+	// Add CSS classes for device-specific styling
+	document.body.classList.toggle('touch-device', is_touch_device);
+	document.body.classList.toggle('mobile-device', is_mobile);
+
+	console.log('Device capabilities:', { is_touch_device, is_mobile });
+}
+
+// Touch gesture handlers
+let touch_start_x = 0;
+let touch_start_y = 0;
+let touch_end_x = 0;
+let touch_end_y = 0;
+
+function handle_touch_start(e) {
+	touch_start_x = e.changedTouches[0].screenX;
+	touch_start_y = e.changedTouches[0].screenY;
+}
+
+function handle_touch_end(e) {
+	touch_end_x = e.changedTouches[0].screenX;
+	touch_end_y = e.changedTouches[0].screenY;
+	handle_swipe();
+}
+
+function handle_swipe() {
+	const x_diff = touch_start_x - touch_end_x;
+	const y_diff = touch_start_y - touch_end_y;
+	const min_swipe_distance = 80; // Increased from 50 to be less sensitive
+	const max_vertical_drift = 100; // Maximum vertical movement allowed for horizontal swipe
+
+	// Only allow horizontal swipes with minimal vertical movement
+	// and require a more significant horizontal distance
+	if (Math.abs(x_diff) > min_swipe_distance &&
+		Math.abs(y_diff) < max_vertical_drift &&
+		Math.abs(x_diff) > Math.abs(y_diff) * 2) { // Horizontal movement must be 2x greater than vertical
+
+		const tabs = document.querySelectorAll('.tab-button');
+		const active_tab = document.querySelector('.tab-button.active');
+
+		if (x_diff > 0 && active_tab === tabs[1]) {
+			// Swipe left: switch to server tab
+			switch_tab('server');
+		} else if (x_diff < 0 && active_tab === tabs[0]) {
+			// Swipe right: switch to local tab
+			switch_tab('local');
+		}
+	}
+}
+
+// Responsive chart configuration
+function get_responsive_chart_config() {
+	const is_small_screen = window.innerWidth <= 768;
+	const is_tablet = window.innerWidth <= 1024 && window.innerWidth > 768;
+	const is_very_small = window.innerWidth <= 480;
+
+	return {
+		responsive: true,
+		maintainAspectRatio: false,
+		interaction: {
+			intersect: false,
+			mode: 'index',
+		},
+		plugins: {
+			tooltip: {
+				enabled: true,
+				mode: 'index',
+				intersect: false,
+				displayColors: true,
+				backgroundColor: 'rgba(0, 0, 0, 0.95)',
+				titleColor: '#ffffff',
+				bodyColor: '#e0e0e0',
+				borderColor: '#333333',
+				borderWidth: 1,
+				cornerRadius: 6,
+				padding: is_small_screen ? 8 : 12,
+				titleFont: {
+					size: is_small_screen ? 11 : 13,
+					weight: 'bold'
+				},
+				bodyFont: {
+					size: is_small_screen ? 10 : 12
+				},
+				callbacks: {
+					title: function(context) {
+						const point = context[0];
+						return `Attenuation: ${point.parsed.x} dB`;
+					},
+					label: function(context) {
+						const dataset = context.dataset;
+						const value = context.parsed.y;
+						return `${dataset.label}: ${value.toFixed(1)} Mbps`;
+					}
+				}
+			},
+			legend: {
+				display: !is_small_screen,
+				position: is_tablet ? 'bottom' : 'top',
+				labels: {
+					color: '#e0e0e0',
+					font: {
+						size: is_small_screen ? 10 : 12
+					},
+					padding: is_small_screen ? 8 : 16,
+					usePointStyle: true,
+					pointStyle: 'line'
+				}
+			}
+		},
+		scales: {
+			x: {
+				type: 'linear',
+				title: {
+					display: true,
+					text: 'Attenuation (dB)',
+					color: '#e0e0e0',
+					font: {
+						size: is_small_screen ? 10 : 12,
+						weight: 'bold'
+					}
+				},
+				ticks: {
+					color: '#a0a0a0',
+					font: {
+						size: is_small_screen ? 9 : 11
+					},
+					maxTicksLimit: is_small_screen ? 6 : 10
+				},
+				grid: {
+					color: '#2a2a2a'
+				}
+			},
+			y: {
+				title: {
+					display: true,
+					text: 'Throughput (Mbps)',
+					color: '#e0e0e0',
+					font: {
+						size: is_small_screen ? 10 : 12,
+						weight: 'bold'
+					}
+				},
+				ticks: {
+					color: '#a0a0a0',
+					font: {
+						size: is_small_screen ? 9 : 11
+					},
+					maxTicksLimit: is_small_screen ? 6 : 8
+				},
+				grid: {
+					color: '#2a2a2a'
+				}
+			}
+		},
+		elements: {
+			line: {
+				borderWidth: is_very_small ? 1.5 : is_small_screen ? 2 : 3,
+				tension: 0.1
+			},
+			point: {
+				radius: is_very_small ? 2 : is_touch_device ? 4 : 3,
+				hoverRadius: is_very_small ? 6 : is_touch_device ? 8 : 6,
+				hitRadius: is_touch_device ? 12 : 8
+			}
+		},
+		// Optimize for mobile performance
+		animation: {
+			duration: is_small_screen ? 500 : 1000
+		}
+	};
+}
+
+// Window resize handler for responsive updates
+function handle_resize() {
+	const was_mobile = is_mobile;
+	detect_device_capabilities();
+
+	// Update chart if screen size category changed
+	if (was_mobile !== is_mobile && chart_instance) {
+		chart_instance.options = {
+			...chart_instance.options,
+			...get_responsive_chart_config()
+		};
+		chart_instance.update('resize');
+	}
+}
+
+// Debounced resize handler
+let resize_timeout;
+function debounced_resize() {
+	clearTimeout(resize_timeout);
+	resize_timeout = setTimeout(handle_resize, 250);
+}
+
 // Set Chart.js global font - will be updated when font loads
 Chart.defaults.font.family = "var(--primary-font)";
 Chart.defaults.color = '#e0e0e0';
@@ -71,6 +273,22 @@ function get_channel_display(channel, band) {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
+	// Initialize device capabilities
+	detect_device_capabilities();
+
+	// Set up touch event listeners for swipe gestures (only on tabs)
+	if (is_touch_device) {
+		const source_tabs = document.querySelector('.source-tabs');
+		if (source_tabs) {
+			source_tabs.addEventListener('touchstart', handle_touch_start, { passive: true });
+			source_tabs.addEventListener('touchend', handle_touch_end, { passive: true });
+		}
+	}
+
+	// Set up resize listener
+	window.addEventListener('resize', debounced_resize);
+
+	// Load reports and initialize file upload
 	load_server_reports();
 	initialize_local_file_upload();
 });
@@ -1400,6 +1618,7 @@ function createTestTable(tests, deviceName, startIndex) {
 
 		// Band cell
 		const bandCell = document.createElement('td');
+		bandCell.setAttribute('data-label', 'Band');
 		bandCell.textContent = test.band || 'UNK';
 		bandCell.style.fontWeight = '700';
 		bandCell.style.color = test.band === '2G' ? '#f72585' : test.band === '5G' ? '#00a0c8' : test.band === '6G' ? '#4361ee' : '#888';
@@ -1407,6 +1626,7 @@ function createTestTable(tests, deviceName, startIndex) {
 
 		// Channel cell with 6G conversion
 		const channelCell = document.createElement('td');
+		channelCell.setAttribute('data-label', 'Channel');
 		channelCell.textContent = get_channel_display(test.channel, test.band);
 		channelCell.style.fontWeight = '700';
 		channelCell.style.color = '#e0e0e0';
@@ -1414,20 +1634,21 @@ function createTestTable(tests, deviceName, startIndex) {
 
 		// Bandwidth cell
 		const bwCell = document.createElement('td');
+		bwCell.setAttribute('data-label', 'BW');
 		bwCell.textContent = `${test.bandwidth}MHz`;
 		bwCell.style.color = '#ccc';
 		row.appendChild(bwCell);
 
 		// NSS cell
 		const nssCell = document.createElement('td');
-
-
+		nssCell.setAttribute('data-label', 'NSS');
 		nssCell.textContent = `${test.nss}SS`;
 		nssCell.style.color = '#ccc';
 		row.appendChild(nssCell);
 
 		// Mode cell
 		const modeCell = document.createElement('td');
+		modeCell.setAttribute('data-label', 'Mode');
 		modeCell.textContent = test.mode || 'Unknown';
 		modeCell.style.color = '#ccc';
 		modeCell.style.fontWeight = '700';
@@ -1436,6 +1657,7 @@ function createTestTable(tests, deviceName, startIndex) {
 		// Version cell
 		const versionCell = document.createElement('td');
 		versionCell.className = 'version-cell';
+		versionCell.setAttribute('data-label', 'Version');
 		const version = test.device_info?.['Software Version'] || 'Unknown';
 		versionCell.textContent = `v${version}`;
 		row.appendChild(versionCell);
@@ -1443,6 +1665,7 @@ function createTestTable(tests, deviceName, startIndex) {
 		// Files cell with download icons
 		const fileCell = document.createElement('td');
 		fileCell.className = 'file-cell';
+		fileCell.setAttribute('data-label', 'Files');
 		fileCell.style.textAlign = 'left';
 
 		if (test.from_server && test.server_path) {
@@ -1769,42 +1992,40 @@ function drawChart(selected_tests) {
 		};
 	});
 
+	// Get responsive configuration
+	const responsive_config = get_responsive_chart_config();
+	const is_small_screen = window.innerWidth <= 768;
+
 	chart_instance = new Chart(ctx, {
 		type: chart_type,
 		data: {
 			datasets: datasets
 		},
 		options: {
-			responsive: true,
-			maintainAspectRatio: false,
-			aspectRatio: 2,
-			interaction: {
-				mode: 'index',
-				intersect: false,
-			},
+			...responsive_config,
 			plugins: {
+				...responsive_config.plugins,
 				title: {
-					display: true,
+					display: !is_small_screen,
 					text: 'WiFi Rate vs Range',
 					color: '#e0e0e0',
 					font: {
-						size: 18,
+						size: is_small_screen ? 14 : 18,
 						weight: '700',
 						family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif"
 					}
 				},
 				subtitle: {
-					display: true,
+					display: !is_small_screen,
 					text: `Comparing ${uniqueConfigs.size} test configuration(s) across ${Array.from(new Set(selected_tests.map(t => t.device_info?.Name || t.file_name))).length} device(s) | Solid: TX, Dotted: RX | Different point styles for multiple tests per DUT model`,
 					color: '#aaa',
 					font: {
-						size: 14,
+						size: is_small_screen ? 10 : 14,
 						family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif"
 					}
 				},
 				legend: {
-					display: true,
-					position: 'top',
+					...responsive_config.plugins.legend,
 					align: 'start',
 					fullSize: false,
 					title: {
@@ -1819,21 +2040,23 @@ function drawChart(selected_tests) {
 						padding: 5
 					},
 					labels: {
+						...responsive_config.plugins.legend.labels,
 						color: '#e0e0e0',
-						padding: 10,
-						boxWidth: 20,
-						boxHeight: 10,
+						padding: is_small_screen ? 6 : 10,
+						boxWidth: is_small_screen ? 15 : 20,
+						boxHeight: is_small_screen ? 8 : 10,
 						font: {
-							size: 10,
+							size: is_small_screen ? 9 : 10,
 							family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif"
 						},
 						generateLabels: function(chart) {
 							// Get default labels
 							const labels = Chart.defaults.plugins.legend.labels.generateLabels(chart);
 							// Truncate long labels if needed
+							const maxLength = is_small_screen ? 40 : 60;
 							return labels.map(label => {
-								if (label.text.length > 60) {
-									label.text = label.text.substring(0, 57) + '...';
+								if (label.text.length > maxLength) {
+									label.text = label.text.substring(0, maxLength - 3) + '...';
 								}
 								return label;
 							});
@@ -1841,14 +2064,7 @@ function drawChart(selected_tests) {
 					}
 				},
 				tooltip: {
-					backgroundColor: 'rgba(0, 0, 0, 0.9)',
-					titleColor: '#e0e0e0',
-					bodyColor: '#e0e0e0',
-					borderColor: '#444',
-					borderWidth: 1,
-					cornerRadius: 8,
-					padding: 12,
-					displayColors: true,
+					...responsive_config.plugins.tooltip,
 					callbacks: {
 						title: function(tooltipItems) {
 							if (tooltipItems.length > 0) {
@@ -2090,8 +2306,11 @@ function updateComparisonTable(selected_tests) {
 		configGroups.get(configKey).push(test);
 	});
 
-	// Create comparison table
+	// Create comparison table (desktop)
 	let html = '<table class="comparison-table">';
+
+	// Create mobile cards (mobile)
+	let mobileHtml = '<div class="mobile-comparison-cards">';
 	html += '<thead><tr>';
 	html += '<th>Test Configuration</th>';
 	html += '<th>Device</th>';
@@ -2131,26 +2350,66 @@ function updateComparisonTable(selected_tests) {
 			// Color coding for band
 			const bandColor = band === '2G' ? '#f72585' : band === '5G' ? '#00a0c8' : band === '6G' ? '#4361ee' : '#888';
 
+			// Desktop table row
 			html += '<tr>';
 			if (index === 0) {
-				html += `<td rowspan="${tests.length}" class="test-config">${config}</td>`;
+				html += `<td rowspan="${tests.length}" class="test-config" data-label="Test Configuration">${config}</td>`;
 			}
-			html += `<td>${deviceName}</td>`;
-			html += `<td>${softwareVersion}</td>`;
-			html += `<td style="color: ${bandColor}; font-weight: 700;">${band}</td>`;
-			html += `<td>${test.mode || 'Unknown'}</td>`;
-			html += `<td class="${maxRate === bestMaxThroughput ? 'best-value' : ''}">${maxRate} Mbps</td>`;
-			html += `<td>${avgRate} Mbps</td>`;
-			html += `<td class="${range === bestRange ? 'best-value' : ''}">${range} dB</td>`;
+			html += `<td data-label="Device">${deviceName}</td>`;
+			html += `<td data-label="Software Version">${softwareVersion}</td>`;
+			html += `<td data-label="Band" style="color: ${bandColor}; font-weight: 700;">${band}</td>`;
+			html += `<td data-label="Mode (0dB)">${test.mode || 'Unknown'}</td>`;
+			html += `<td data-label="Max Throughput" class="${maxRate === bestMaxThroughput ? 'best-value' : ''}">${maxRate} Mbps</td>`;
+			html += `<td data-label="Avg Throughput">${avgRate} Mbps</td>`;
+			html += `<td data-label="Range (>10Mbps)" class="${range === bestRange ? 'best-value' : ''}">${range} dB</td>`;
 			html += '</tr>';
+
+			// Mobile card
+			mobileHtml += `
+			<div class="mobile-comparison-card">
+				<div class="mobile-card-header">
+					<div class="mobile-card-title">
+						${deviceName}<br>
+						<small style="font-size: 0.75em; color: var(--text-tertiary);">${config}</small>
+					</div>
+					<div class="mobile-card-band" style="background-color: ${bandColor}20; color: ${bandColor};">
+						${band}
+					</div>
+				</div>
+				<div class="mobile-card-content">
+					<div class="mobile-card-item full-width">
+						<div class="mobile-card-label">Software Version</div>
+						<div class="mobile-card-value">${softwareVersion}</div>
+					</div>
+					<div class="mobile-card-item">
+						<div class="mobile-card-label">Mode (0dB)</div>
+						<div class="mobile-card-value">${test.mode || 'Unknown'}</div>
+					</div>
+					<div class="mobile-card-item">
+						<div class="mobile-card-label">Max Throughput</div>
+						<div class="mobile-card-value ${maxRate === bestMaxThroughput ? 'best-value' : ''}">${maxRate} Mbps</div>
+					</div>
+					<div class="mobile-card-item">
+						<div class="mobile-card-label">Avg Throughput</div>
+						<div class="mobile-card-value">${avgRate} Mbps</div>
+					</div>
+					<div class="mobile-card-item">
+						<div class="mobile-card-label">Range (>10Mbps)</div>
+						<div class="mobile-card-value ${range === bestRange ? 'best-value' : ''}">${range} dB</div>
+					</div>
+				</div>
+			</div>`;
 		});
 
-		// Add separator between config groups
+		// Add separator between config groups in desktop table
 		html += '<tr style="height: 10px;"><td colspan="8" style="border: none;"></td></tr>';
 	});
 
 	html += '</tbody></table>';
-	container.innerHTML = html;
+	mobileHtml += '</div>';
+
+	// Combine both layouts
+	container.innerHTML = html + mobileHtml;
 }
 
 function export_csv() {

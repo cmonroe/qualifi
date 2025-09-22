@@ -974,6 +974,15 @@ main {
 	padding: var(--space-lg);
 }
 
+/* Default: mobile cards hidden, desktop table shown */
+.mobile-comparison-cards {
+	display: none;
+}
+
+.comparison-table {
+	display: table;
+}
+
 .comparison-panel h3 {
 	font-size: 1rem;
 	font-weight: 600;
@@ -1155,34 +1164,206 @@ main {
 	color: var(--text-primary);
 }
 
-/* Responsive Design */
-@media (max-width: 1024px) {
-	.test-config-columns {
-		grid-template-columns: 1fr;
+/* Touch-friendly base adjustments */
+@media (pointer: coarse) {
+	/* Increase touch target sizes for touch devices */
+	.btn-small {
+		min-height: 44px;
+		min-width: 44px;
+		padding: var(--space-sm) var(--space-md);
 	}
 
-	.stats-grid {
-		grid-template-columns: 1fr;
+	.chart-button {
+		min-height: 48px;
+		padding: var(--space-md) var(--space-lg);
 	}
 
-	.chart-wrapper {
-		height: 500px;
+	.tab-button {
+		min-height: 48px;
+		padding: var(--space-sm) var(--space-md);
+	}
+
+	.test-checkbox, .version-checkbox {
+		width: 20px;
+		height: 20px;
+		margin: var(--space-xs);
+	}
+
+	/* Increase touch target for vendor/model headers */
+	.vendor-header, .model-header {
+		min-height: 48px;
+		padding: var(--space-md);
+	}
+
+	/* Larger scrollbar for touch */
+	::-webkit-scrollbar {
+		width: 14px;
+		height: 14px;
+	}
+
+	::-webkit-scrollbar-thumb {
+		border: 3px solid var(--bg-secondary);
 	}
 }
 
-@media (max-width: 768px) {
+/* Responsive Design - Mobile First Approach */
+
+/* Large Tablets and Small Desktops */
+@media (max-width: 1200px) {
+	:root {
+		--max-width: 100%;
+		--space-lg: 1.5rem;
+		--space-xl: 2.5rem;
+	}
+
+	.container {
+		padding: 0 var(--space-md);
+	}
+
+	.stats-grid {
+		grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+	}
+}
+
+/* Tablets */
+@media (max-width: 1024px) and (min-width: 901px) {
+	.test-config-columns {
+		grid-template-columns: 1fr;
+		gap: var(--space-md);
+	}
+
+	.stats-grid {
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	}
+
+	.chart-wrapper {
+		height: 400px; /* Reduced for tablets */
+	}
+
+	.chart-container {
+		min-height: 450px; /* Reduced for tablets */
+	}
+
+	#rvrChart {
+		height: 400px !important;
+	}
+
+	/* Stack chart controls vertically on tablets */
+	.chart-controls {
+		flex-direction: column;
+		align-items: stretch;
+		gap: var(--space-md);
+	}
+
+	.chart-controls-left,
+	.chart-controls-right {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-sm);
+		justify-content: center;
+	}
+
+	/* Make search bar stack on tablets */
+	.search-bar {
+		flex-direction: column;
+		gap: var(--space-sm);
+	}
+
+	.search-bar input {
+		width: 100%;
+	}
+
+	/* Improve quick filters layout */
+	.quick-filters {
+		flex-wrap: wrap;
+		gap: var(--space-xs);
+	}
+
+	/* Adjust header for tablets */
+	.header-text {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0;
+	}
+
+	.header-text h1 {
+		font-size: 1.125rem;
+	}
+
+	.subheader {
+		font-size: 0.8125rem;
+	}
+}
+
+/* Mobile and Tablet Devices */
+@media (max-width: 900px) {
 	:root {
 		font-size: 14px;
+		--space-sm: 0.75rem;
+		--space-md: 1rem;
+		--space-lg: 1.25rem;
+		--space-xl: 2rem;
+	}
+
+	body {
+		overflow-x: hidden;
+	}
+
+	/* Ensure no scroll bars in viewport */
+	html, body {
+		max-width: 100vw;
+		overflow-x: hidden;
 	}
 
 	.header-content {
 		padding: 0 var(--space-md);
+		flex-direction: row;
+		justify-content: space-between;
+	}
+
+	.header-text {
+		align-items: flex-start;
+	}
+
+	.header-text h1 {
+		font-size: 1rem;
+	}
+
+	.subheader {
+		font-size: 0.75rem;
+	}
+
+	.logo-container {
+		padding: 6px;
+	}
+
+	.header-logo {
+		width: 24px;
+		height: 24px;
 	}
 
 	.control-panel {
 		padding: var(--space-md);
+		margin-bottom: var(--space-lg);
 	}
 
+	/* Mobile-optimized tabs */
+	.source-tabs {
+		margin-bottom: var(--space-md);
+	}
+
+	.tab-button {
+		padding: var(--space-sm);
+		font-size: 0.8125rem;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	.tab-icon {
+		font-size: 1.125rem;
+	}
+
+	/* Mobile chart controls */
 	.chart-controls {
 		flex-direction: column;
 		gap: var(--space-md);
@@ -1192,10 +1373,421 @@ main {
 	.chart-controls-right {
 		width: 100%;
 		flex-wrap: wrap;
+		justify-content: center;
+		gap: var(--space-xs);
+	}
+
+	.chart-button {
+		font-size: 0.8125rem;
+		padding: var(--space-sm) var(--space-md);
+		flex: 1;
+		min-width: 120px;
 	}
 
 	.chart-wrapper {
+		height: 350px; /* Further reduced for mobile phones */
+		margin: 0 -var(--space-md);
+		padding: 0 var(--space-md);
+		overflow-x: hidden; /* Remove horizontal scroll */
+		overflow-y: hidden; /* Remove vertical scroll */
+	}
+
+	.chart-container {
+		min-height: 400px; /* Reduced for mobile */
+		margin-bottom: var(--space-lg);
+		padding: var(--space-sm); /* Reduced padding */
+	}
+
+	#rvrChart {
+		height: 350px !important; /* Match wrapper height */
+		width: 100% !important; /* Remove min-width to prevent horizontal scroll */
+	}
+
+	/* Mobile report browser */
+	.report-browser {
+		max-height: 400px;
+		font-size: 0.875rem;
+	}
+
+	.vendor-header {
+		padding: var(--space-sm);
+		font-size: 0.875rem;
+	}
+
+	.model-header {
+		padding: var(--space-xs) var(--space-sm);
+		font-size: 0.8125rem;
+	}
+
+	.version-item {
+		padding: var(--space-xs);
+		font-size: 0.8125rem;
+	}
+
+	/* Mobile file input */
+	.file-input-label {
+		padding: var(--space-md);
+		font-size: 0.8125rem;
+	}
+
+	/* Mobile test selector adjustments */
+	.device-group-header {
+		padding: var(--space-sm) var(--space-md);
+	}
+
+	.device-group-title {
+		font-size: 0.9375rem;
+	}
+
+	.device-group-meta {
+		font-size: 0.6875rem;
+	}
+
+	/* Stack DUT-TX and DUT-RX columns vertically on mobile */
+	.test-config-columns {
+		grid-template-columns: 1fr;
+		gap: var(--space-md);
+	}
+
+	.test-column {
+		padding: var(--space-sm);
+	}
+
+	/* Mobile test tables - keep table format but make compact */
+	.test-table {
+		font-size: 0.6875rem; /* Smaller text */
+		width: 100%;
+		border-collapse: collapse;
+	}
+
+	.test-table th {
+		padding: 4px 2px; /* Reduced padding */
+		font-size: 0.625rem; /* Even smaller headers */
+		background-color: var(--bg-tertiary);
+		color: var(--text-tertiary);
+		text-align: left;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		border-bottom: 1px solid var(--border-subtle);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.test-table td {
+		padding: 4px 2px; /* Reduced padding */
+		border-bottom: 1px solid var(--border-subtle);
+		color: var(--text-secondary);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 0; /* Allow text-overflow to work */
+	}
+
+	.test-table td:first-child {
+		width: 24px; /* Fixed width for checkbox */
+		padding: 4px;
+		text-align: center;
+	}
+
+	.test-table tr:hover {
+		background-color: var(--bg-hover);
+	}
+
+	.test-table tr:hover td {
+		color: var(--text-primary);
+	}
+
+	.test-checkbox {
+		width: 16px;
+		height: 16px;
+		cursor: pointer;
+		accent-color: var(--accent-primary);
+	}
+
+	/* Mobile stats grid */
+	.stats-grid {
+		grid-template-columns: 1fr;
+		gap: var(--space-sm);
+	}
+
+	.stat-card {
+		padding: var(--space-sm);
+	}
+
+	.stat-card h4 {
+		font-size: 0.8125rem;
+	}
+
+	.stat-value {
+		font-size: 1.25rem;
+	}
+
+	/* Mobile comparison table - completely restructured for better mobile UX */
+	.comparison-panel {
+		overflow-x: hidden;
+	}
+
+	.comparison-table {
+		display: none !important; /* Hide default table on mobile */
+	}
+
+	/* Mobile card-based comparison layout */
+	.mobile-comparison-cards {
+		display: block !important; /* Show mobile cards on mobile */
+	}
+
+	.mobile-comparison-card {
+		background: var(--bg-tertiary);
+		border: 1px solid var(--border-subtle);
+		border-radius: 6px;
+		margin-bottom: var(--space-md);
+		padding: var(--space-sm);
+		position: relative;
+	}
+
+	.mobile-comparison-card::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 3px;
+		background: linear-gradient(90deg, var(--accent-primary), var(--accent-success));
+		border-radius: 6px 6px 0 0;
+	}
+
+	.mobile-card-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		margin-bottom: var(--space-sm);
+		padding-bottom: var(--space-xs);
+		border-bottom: 1px solid var(--border-subtle);
+	}
+
+	.mobile-card-title {
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: var(--text-primary);
+		line-height: 1.3;
+		flex: 1;
+	}
+
+	.mobile-card-band {
+		font-size: 0.75rem;
+		font-weight: 700;
+		padding: 2px 6px;
+		border-radius: 3px;
+		margin-left: var(--space-xs);
+	}
+
+	.mobile-card-content {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--space-xs);
+		font-size: 0.8125rem;
+	}
+
+	.mobile-card-item {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.mobile-card-label {
+		font-size: 0.6875rem;
+		color: var(--text-tertiary);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		font-weight: 500;
+	}
+
+	.mobile-card-value {
+		color: var(--text-secondary);
+		font-weight: 500;
+	}
+
+	.mobile-card-value.best-value {
+		color: var(--accent-success);
+		font-weight: 600;
+	}
+
+	.mobile-card-item.full-width {
+		grid-column: 1 / -1;
+	}
+}
+
+/* Desktop layouts (hidden on mobile) */
+@media (min-width: 901px) {
+	.comparison-table {
+		display: table !important;
+	}
+
+	.mobile-comparison-cards {
+		display: none !important;
+	}
+
+	/* Restore normal test table layout on desktop */
+	.test-table {
+		font-size: 0.8125rem;
+	}
+
+	.test-table th {
+		padding: var(--space-xs);
+		font-size: 0.75rem;
+	}
+
+	.test-table td {
+		padding: var(--space-xs);
+		white-space: normal;
+		overflow: visible;
+		text-overflow: clip;
+		max-width: none;
+	}
+
+	.test-table td:first-child {
+		width: 30px;
+		padding: var(--space-xs);
+		text-align: left;
+	}
+
+	.test-checkbox {
+		width: 14px;
+		height: 14px;
+	}
+
+	/* Restore larger chart sizes for desktop */
+	.chart-container {
+		min-height: 800px !important;
+		padding: var(--space-lg);
+	}
+
+	.chart-wrapper {
+		height: 700px !important;
+	}
+
+	#rvrChart {
+		height: 700px !important;
+	}
+}
+
+
+/* Small Mobile Phones */
+@media (max-width: 480px) {
+	:root {
+		font-size: 13px;
+		--space-xs: 0.375rem;
+		--space-sm: 0.625rem;
+		--space-md: 0.875rem;
+		--space-lg: 1rem;
+	}
+
+	.container {
+		padding: 0 var(--space-sm);
+	}
+
+	.control-panel {
+		padding: var(--space-sm);
+		border-radius: 6px;
+	}
+
+	.chart-container {
+		padding: var(--space-sm);
+		margin: 0 -var(--space-sm);
+		border-radius: 0;
+		border-left: none;
+		border-right: none;
+		min-height: 300px; /* Further reduced for small screens */
+	}
+
+	.chart-wrapper {
+		margin: 0;
+		height: 280px; /* Even smaller for very small phones */
+		overflow: hidden; /* Ensure no scroll bars */
+	}
+
+	#rvrChart {
+		height: 280px !important;
+	}
+
+	.header-content {
+		padding: 0 var(--space-sm);
+	}
+
+	.tab-button {
+		font-size: 0.75rem;
+		padding: 6px;
+	}
+
+	.chart-button {
+		font-size: 0.75rem;
+		padding: var(--space-xs) var(--space-sm);
+		min-width: 100px;
+	}
+
+	/* Extra compact test tables for very small screens */
+	.test-table {
+		font-size: 0.625rem; /* Even smaller */
+	}
+
+	.test-table th {
+		padding: 2px 1px;
+		font-size: 0.5625rem;
+	}
+
+	.test-table td {
+		padding: 2px 1px;
+	}
+
+	.test-table td:first-child {
+		width: 20px;
+		padding: 2px;
+	}
+
+	.test-checkbox {
+		width: 14px;
+		height: 14px;
+	}
+
+	/* Ensure test columns are stacked and have adequate spacing on small screens */
+	.test-config-columns {
+		grid-template-columns: 1fr !important;
+		gap: var(--space-sm); /* Smaller gap for very small screens */
+	}
+
+	.test-column {
+		padding: var(--space-xs);
+	}
+}
+
+/* Landscape orientation adjustments for tablets */
+@media (max-width: 1024px) and (min-width: 901px) and (orientation: landscape) {
+	.chart-wrapper {
 		height: 400px;
+	}
+
+	.chart-controls {
+		flex-direction: row;
+		flex-wrap: wrap;
+		justify-content: space-between;
+	}
+
+	.chart-controls-left,
+	.chart-controls-right {
+		flex-direction: row;
+		flex-wrap: wrap;
+	}
+}
+
+/* High DPI display adjustments */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+	.header-logo,
+	.vendor-logo,
+	.model-image {
+		image-rendering: -webkit-optimize-contrast;
+		image-rendering: crisp-edges;
 	}
 }
 
