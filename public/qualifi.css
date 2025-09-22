@@ -73,7 +73,7 @@
 	--rx-color: #ff3b30;
 
 	/* Layout */
-	--max-width: 1440px;
+	--max-width: 1600px;
 	--sidebar-width: 320px;
 	--header-height: 64px;
 
@@ -871,6 +871,7 @@ main {
 	padding: var(--space-lg);
 	margin-bottom: var(--space-xl);
 	position: relative;
+	min-height: 800px;
 }
 
 .chart-controls {
@@ -894,14 +895,15 @@ main {
 
 .chart-wrapper {
 	position: relative;
-	height: 600px;
+	height: 700px;
 	width: 100%;
+	overflow: visible;
 }
 
 #rvrChart {
 	display: block !important;
 	width: 100% !important;
-	height: 100% !important;
+	height: 700px !important;
 }
 
 /* Stats Panel - Data Grid */

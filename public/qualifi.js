@@ -1777,6 +1777,7 @@ function drawChart(selected_tests) {
 		options: {
 			responsive: true,
 			maintainAspectRatio: false,
+			aspectRatio: 2,
 			interaction: {
 				mode: 'index',
 				intersect: false,
@@ -1804,6 +1805,8 @@ function drawChart(selected_tests) {
 				legend: {
 					display: true,
 					position: 'top',
+					align: 'start',
+					fullSize: false,
 					title: {
 						display: false,
 						text: 'Legend shows baseline (0dB) configuration - hover points for actual PHY parameters',
@@ -1817,10 +1820,23 @@ function drawChart(selected_tests) {
 					},
 					labels: {
 						color: '#e0e0e0',
-						padding: 15,
+						padding: 10,
+						boxWidth: 20,
+						boxHeight: 10,
 						font: {
-							size: 11,
+							size: 10,
 							family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif"
+						},
+						generateLabels: function(chart) {
+							// Get default labels
+							const labels = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+							// Truncate long labels if needed
+							return labels.map(label => {
+								if (label.text.length > 60) {
+									label.text = label.text.substring(0, 57) + '...';
+								}
+								return label;
+							});
 						}
 					}
 				},
