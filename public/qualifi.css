@@ -893,6 +893,106 @@ main {
 	gap: var(--space-sm);
 }
 
+.rotation-controls {
+	background-color: var(--bg-secondary);
+	border: 1px solid var(--border-subtle);
+	border-radius: 8px;
+	padding: var(--space-md);
+	margin-bottom: var(--space-lg);
+}
+
+.rotation-control-section label {
+	display: block;
+	font-weight: 600;
+	color: var(--text-primary);
+	margin-bottom: var(--space-sm);
+	font-size: 0.9rem;
+}
+
+.angle-checkbox-group {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-md);
+	align-items: center;
+}
+
+.angle-checkbox-label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+	padding: 6px 12px;
+	background-color: var(--bg-tertiary);
+	border: 1px solid var(--border-subtle);
+	border-radius: 4px;
+	font-size: 0.9rem;
+	color: var(--text-secondary);
+	transition: all 0.2s ease;
+}
+
+.angle-checkbox-label:hover {
+	background-color: var(--bg-secondary);
+	border-color: var(--accent-primary);
+}
+
+.angle-checkbox-label input[type="checkbox"] {
+	margin: 0;
+	cursor: pointer;
+}
+
+#angleSelect {
+	background-color: var(--bg-tertiary);
+	border: 1px solid var(--border-subtle);
+	border-radius: 4px;
+	color: var(--text-primary);
+	font-size: 0.9rem;
+	padding: 4px;
+}
+
+#angleSelect option {
+	padding: 6px 8px;
+	cursor: pointer;
+}
+
+#angleSelect option:checked {
+	background-color: var(--accent-primary);
+	color: var(--bg-primary);
+}
+
+.attenuation-filter {
+	background-color: var(--bg-secondary);
+	border: 1px solid var(--border-subtle);
+	border-radius: 8px;
+	padding: var(--space-md);
+	margin-bottom: var(--space-lg);
+	display: flex;
+	align-items: center;
+	gap: var(--space-md);
+}
+
+.attenuation-filter label {
+	font-weight: 600;
+	color: var(--text-primary);
+	font-size: 0.9rem;
+	white-space: nowrap;
+}
+
+.attenuation-filter select {
+	flex: 1;
+	padding: 8px 12px;
+	background-color: var(--bg-tertiary);
+	border: 1px solid var(--border-subtle);
+	border-radius: 4px;
+	color: var(--text-primary);
+	font-size: 0.9rem;
+	cursor: pointer;
+}
+
+.attenuation-filter select:focus {
+	outline: none;
+	border-color: var(--accent-primary);
+}
+
 .chart-wrapper {
 	position: relative;
 	height: 700px;

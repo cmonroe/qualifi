@@ -901,10 +901,11 @@ function extract_rvr_data(workbook) {
 	const tests = [];
 	let total_skipped = 0;
 
-	// Look for Rate vs Range sheets
+	// Look for Rate vs Range, Rate vs Orientation, or Rate vs Range vs Orientation sheets
 	workbook.SheetNames.forEach(sheet_name => {
-		if (sheet_name.toLowerCase().includes('rate') &&
-			sheet_name.toLowerCase().includes('range')) {
+		const lowerName = sheet_name.toLowerCase();
+		if (lowerName.includes('rate') &&
+			(lowerName.includes('range') || lowerName.includes('orientation'))) {
 
 			console.log(`Processing sheet: ${sheet_name}`);
 
@@ -965,7 +966,8 @@ function extract_rvr_data(workbook) {
 			const bwIndex = findColumnIndex(headers, 'bw');
 			const nssIndex = findColumnIndex(headers, 'nss');
 			const securityIndex = findColumnIndex(headers, 'security');
-			const modeIndex = findColumnIndex(headers, 'mode'); // Fallback for when TX Mode isn't available
+			const modeIndex = findColumnIndex(headers, 'mode');
+			const angleIndex = findColumnIndex(headers, 'angle');
 
 			// TX-specific columns - try multiple variations
 			let txModeIndex = findColumnIndex(headers, 'tx mode');
@@ -1023,9 +1025,16 @@ function extract_rvr_data(workbook) {
 				totalColumns: headers.length
 			});
 
-			// Validate required columns
-			if (attIndex === -1 || throughputIndex === -1) {
-				console.error('Missing required columns in sheet:', sheet_name);
+			const has_rotation = angleIndex !== -1;
+			const has_attenuation = attIndex !== -1;
+
+			if (throughputIndex === -1) {
+				console.error('Missing required throughput column in sheet:', sheet_name);
+				return;
+			}
+
+			if (!has_attenuation && !has_rotation) {
+				console.error('Sheet must have either Attenuation or Angle column:', sheet_name);
 				return;
 			}
 
@@ -1038,33 +1047,42 @@ function extract_rvr_data(workbook) {
 
 			for (let i = header_row + 1; i < data.length; i++) {
 				const row = data[i];
-				if (!row || row[attIndex] === undefined || row[throughputIndex] === undefined) continue;
+				if (!row || row[throughputIndex] === undefined) continue;
 
-				// Skip rows where attenuation or throughput are not valid numbers
-				const attValue = row[attIndex];
 				const throughputValue = row[throughputIndex];
 				const channelValue = row[channelIndex];
 				const frequencyValue = row[frequencyIndex];
+				const attValue = has_attenuation ? row[attIndex] : null;
+				const angleValue = has_rotation ? row[angleIndex] : null;
 
-				if (attValue === null || attValue === '' || throughputValue === null || throughputValue === '') continue;
+				if (throughputValue === null || throughputValue === '') continue;
 
-				// Remove commas from numeric values before parsing
-				const cleanAttValue = attValue.toString().replace(/,/g, '');
 				const cleanThroughputValue = throughputValue.toString().replace(/,/g, '');
 				const cleanChannelValue = channelValue ? channelValue.toString().replace(/,/g, '') : '0';
 				const cleanFrequencyValue = frequencyValue ? frequencyValue.toString().replace(/,/g, '') : '0';
 
-				const attenuation = parseFloat(cleanAttValue);
 				const throughput = parseFloat(cleanThroughputValue);
 				const channel = parseFloat(cleanChannelValue) || 0;
 				const frequency = parseFloat(cleanFrequencyValue) || 0;
 
-				// Skip if parsing failed
-				if (isNaN(attenuation) || isNaN(throughput)) continue;
+				let attenuation = 0;
+				if (has_attenuation && attValue !== null && attValue !== undefined && attValue !== '') {
+					const cleanAttValue = attValue.toString().replace(/,/g, '');
+					attenuation = parseFloat(cleanAttValue);
+					if (isNaN(attenuation)) attenuation = 0;
+				}
 
-				// Skip invalid data points (channel 0 or throughput 0)
+				let angle = null;
+				if (has_rotation && angleValue !== null && angleValue !== undefined && angleValue !== '') {
+					const cleanAngleValue = angleValue.toString().replace(/,/g, '');
+					angle = parseFloat(cleanAngleValue);
+					if (isNaN(angle)) angle = null;
+				}
+
+				if (isNaN(throughput)) continue;
+
 				if (channel === 0 || throughput === 0) {
-					console.log(`Skipping invalid data point: channel=${channel}, throughput=${throughput}, attenuation=${attenuation}`);
+					console.log(`Skipping invalid data point: channel=${channel}, throughput=${throughput}`);
 					skipped_count++;
 					continue;
 				}
@@ -1150,7 +1168,7 @@ function extract_rvr_data(workbook) {
 					security,
 					direction,
 					band: determine_band(frequency),
-					// Config values for test identification
+					angle,
 					configBandwidth: cleanConfigBandwidth,
 					configNss: cleanConfigNss,
 					configMode
@@ -1158,30 +1176,50 @@ function extract_rvr_data(workbook) {
 
 			}
 
-			// Second pass: group by baseline configuration (attenuation 0 or lowest attenuation)
-			// Sort by direction and channel first
+			const unique_angles = [...new Set(allDataPoints.map(p => p.angle).filter(a => a !== null))].sort((a, b) => a - b);
+			const angle_increment = unique_angles.length > 1 ? unique_angles[1] - unique_angles[0] : 0;
+			const has_actual_rotation = has_rotation && unique_angles.length > 0;
+
+			const unique_attenuations = [...new Set(allDataPoints.map(p => p.attenuation).filter(a => a !== 0))];
+			const has_varying_attenuation = unique_attenuations.length > 0;
+
+			const test_type = has_actual_rotation && !has_varying_attenuation ? 'rotation' :
+			                   has_actual_rotation && has_varying_attenuation ? 'rvr_rotation' : 'rvr';
+
 			allDataPoints.sort((a, b) => {
 				if (a.direction !== b.direction) return a.direction.localeCompare(b.direction);
 				if (a.channel !== b.channel) return a.channel - b.channel;
+				if (a.angle !== null && b.angle !== null && a.angle !== b.angle) return a.angle - b.angle;
 				return a.attenuation - b.attenuation;
 			});
 
-			// Create test groups based on baseline configuration
 			allDataPoints.forEach(point => {
-				// Find the baseline configuration for this direction/channel
-				const baselinePoint = allDataPoints.find(p =>
-					p.direction === point.direction &&
-					p.channel === point.channel &&
-					p.attenuation === Math.min(...allDataPoints
-						.filter(dp => dp.direction === point.direction && dp.channel === point.channel)
-						.map(dp => dp.attenuation))
-				);
+				let baselinePoint;
+				if (test_type === 'rotation') {
+					const minAngle = Math.min(...allDataPoints
+						.filter(dp => dp.direction === point.direction && dp.channel === point.channel && dp.angle !== null)
+						.map(dp => dp.angle));
+					baselinePoint = allDataPoints.find(p =>
+						p.direction === point.direction &&
+						p.channel === point.channel &&
+						p.angle === minAngle
+					);
+				} else {
+					const minAtten = Math.min(...allDataPoints
+						.filter(dp => dp.direction === point.direction && dp.channel === point.channel &&
+						              (test_type === 'rvr_rotation' ? dp.angle === point.angle : true))
+						.map(dp => dp.attenuation));
+					baselinePoint = allDataPoints.find(p =>
+						p.direction === point.direction &&
+						p.channel === point.channel &&
+						(test_type === 'rvr_rotation' ? p.angle === point.angle : true) &&
+						p.attenuation === minAtten
+					);
+				}
 
 				if (!baselinePoint) return;
 
-				// Create test key based on BASELINE configuration using config values
-				const testKey = `${point.direction}_CH${point.channel}_${baselinePoint.configBandwidth}MHz_${baselinePoint.configNss}SS_${point.security}`;
-
+				let testKey = `${point.direction}_CH${point.channel}_${baselinePoint.configBandwidth}MHz_${baselinePoint.configNss}SS_${point.security}`;
 
 				if (!testGroups.has(testKey)) {
 					const testObj = {
@@ -1195,10 +1233,12 @@ function extract_rvr_data(workbook) {
 						security: point.security,
 						mode: baselinePoint.configMode,
 						sheet_name: sheet_name,
+						has_rotation: has_actual_rotation,
+						test_type,
+						angles: test_type === 'rotation' || test_type === 'rvr_rotation' ? unique_angles : [],
+						angle_increment,
 						data: []
 					};
-
-
 					testGroups.set(testKey, testObj);
 				}
 
@@ -1206,21 +1246,17 @@ function extract_rvr_data(workbook) {
 				testGroup.data.push(point);
 			});
 
-			// Convert to array and sort data points by attenuation
 			testGroups.forEach(test => {
-				// Only include tests that have valid data points
 				if (test.data.length > 0) {
-					test.data.sort((a, b) => a.attenuation - b.attenuation);
+					if (test.test_type === 'rotation') {
+						test.data.sort((a, b) => (a.angle || 0) - (b.angle || 0));
+					} else {
+						test.data.sort((a, b) => a.attenuation - b.attenuation);
+					}
 
-					// Update mode based on data points (bandwidth and nss already set correctly from config values)
-					const baselinePoint = test.data.find(point => point.attenuation === 0);
+					const baselinePoint = test.data.find(point => point.attenuation === 0) || test.data[0];
 					if (baselinePoint) {
 						test.mode = baselinePoint.mode;
-						// Keep existing bandwidth and nss from config values
-					} else if (test.data.length > 0) {
-						// Use mode from the first (lowest attenuation) data point
-						test.mode = test.data[0].mode;
-						// Keep existing bandwidth and nss from config values
 					}
 
 					tests.push(test);
@@ -1649,7 +1685,11 @@ function createTestTable(tests, deviceName, startIndex) {
 		// Mode cell
 		const modeCell = document.createElement('td');
 		modeCell.setAttribute('data-label', 'Mode');
-		modeCell.textContent = test.mode || 'Unknown';
+		let mode_text = test.mode || 'Unknown';
+		if (test.has_rotation && test.angle_increment > 0) {
+			mode_text += ` (Rotation: ${test.angle_increment}° steps)`;
+		}
+		modeCell.textContent = mode_text;
 		modeCell.style.color = '#ccc';
 		modeCell.style.fontWeight = '700';
 		row.appendChild(modeCell);
@@ -1799,11 +1839,12 @@ window.select_matching_tests = function() {
 };
 
 function formatTestName(test) {
-	// Format test name based on baseline (attenuation 0) configuration
-	// Include indicator if this is using TX-specific parameters
-	const prefix = test.direction && test.direction.includes('TX') ? '' : '';
 	const displayChannel = format_channel_number(test.channel, test.band);
-	return `${test.band || 'UNK'} CH${displayChannel} ${test.bandwidth}MHz ${test.nss}SS ${test.mode}`;
+	let base_name = `${test.band || 'UNK'} CH${displayChannel} ${test.bandwidth}MHz ${test.nss}SS ${test.mode}`;
+	if (test.has_rotation && test.angle_increment > 0) {
+		base_name += ` (Rotation: ${test.angle_increment}° steps)`;
+	}
+	return base_name;
 }
 
 function updateChart() {
@@ -1828,7 +1869,87 @@ function updateChart() {
 		document.querySelector('.chart-container').style.display = 'none';
 		document.querySelector('.stats-panel').style.display = 'none';
 		document.querySelector('#comparisonPanel').style.display = 'none';
+		document.getElementById('rotationControls').style.display = 'none';
 		return;
+	}
+
+	const has_rvr_rotation = selected_tests.some(t => t.test_type === 'rvr_rotation');
+	const min_angle_increment = Math.min(...selected_tests
+		.filter(t => t.angle_increment > 0)
+		.map(t => t.angle_increment), Infinity);
+
+	const show_angle_selector = has_rvr_rotation && min_angle_increment > 20;
+
+	if (show_angle_selector) {
+		const all_angles = new Set();
+		selected_tests.forEach(t => {
+			if (t.test_type === 'rvr_rotation' && t.angles && t.angles.length > 0) {
+				t.angles.forEach(angle => all_angles.add(angle));
+			}
+		});
+		const sorted_angles = Array.from(all_angles).sort((a, b) => a - b);
+
+		const angle_checkboxes_container = document.getElementById('angleCheckboxes');
+
+		const currently_selected = [];
+		const existingSelect = document.getElementById('angleSelect');
+		if (existingSelect) {
+			Array.from(existingSelect.selectedOptions).forEach(opt => {
+				currently_selected.push(parseFloat(opt.value));
+			});
+		} else {
+			const existingCheckboxes = document.querySelectorAll('#angleCheckboxes input[type="checkbox"]:checked');
+			existingCheckboxes.forEach(cb => {
+				currently_selected.push(parseFloat(cb.value));
+			});
+		}
+
+		if (currently_selected.length === 0) {
+			currently_selected.push(0);
+		}
+
+		angle_checkboxes_container.innerHTML = '';
+
+		if (sorted_angles.length <= 8) {
+			sorted_angles.forEach((angle, idx) => {
+				const checkbox_wrapper = document.createElement('label');
+				checkbox_wrapper.className = 'angle-checkbox-label';
+				const checkbox = document.createElement('input');
+				checkbox.type = 'checkbox';
+				checkbox.value = angle;
+				checkbox.checked = currently_selected.includes(angle);
+				checkbox.onchange = updateChart;
+				checkbox_wrapper.appendChild(checkbox);
+				checkbox_wrapper.appendChild(document.createTextNode(` ${angle}°`));
+				angle_checkboxes_container.appendChild(checkbox_wrapper);
+			});
+		} else {
+			const select = document.createElement('select');
+			select.id = 'angleSelect';
+			select.multiple = true;
+			select.size = Math.min(8, sorted_angles.length);
+			select.style.width = '100%';
+			select.onchange = updateChart;
+			sorted_angles.forEach(angle => {
+				const option = document.createElement('option');
+				option.value = angle;
+				option.textContent = `${angle}°`;
+				option.selected = currently_selected.includes(angle);
+				select.appendChild(option);
+			});
+			angle_checkboxes_container.appendChild(select);
+
+			const hint = document.createElement('div');
+			hint.style.fontSize = '0.85em';
+			hint.style.color = '#888';
+			hint.style.marginTop = '8px';
+			hint.textContent = 'Hold Ctrl/Cmd to select multiple angles';
+			angle_checkboxes_container.appendChild(hint);
+		}
+
+		document.getElementById('rotationControls').style.display = 'block';
+	} else {
+		document.getElementById('rotationControls').style.display = 'none';
 	}
 
 	document.querySelector('.chart-container').style.display = 'block';
@@ -1855,6 +1976,55 @@ function drawChart(selected_tests) {
 		chart_instance.destroy();
 	}
 
+	const test_types = new Set(selected_tests.map(t => t.test_type || 'rvr'));
+	const is_pure_rotation = test_types.has('rotation') && test_types.size === 1;
+	const has_rvr_rotation = test_types.has('rvr_rotation');
+	const is_mixed = test_types.size > 1;
+
+	let selected_angles = [];
+	if (has_rvr_rotation) {
+		const rotationControlsVisible = document.getElementById('rotationControls').style.display !== 'none';
+		if (rotationControlsVisible) {
+			const angleSelect = document.getElementById('angleSelect');
+			if (angleSelect) {
+				const selectedOptions = Array.from(angleSelect.selectedOptions);
+				selected_angles = selectedOptions.map(opt => parseFloat(opt.value));
+			} else {
+				const angle_checkboxes = document.querySelectorAll('#angleCheckboxes input[type="checkbox"]:checked');
+				selected_angles = Array.from(angle_checkboxes).map(cb => parseFloat(cb.value));
+			}
+			if (selected_angles.length === 0) {
+				selected_angles = [0];
+			}
+		} else {
+			const all_angles = new Set();
+			selected_tests.forEach(t => {
+				if (t.test_type === 'rvr_rotation' && t.angles && t.angles.length > 0) {
+					t.angles.forEach(angle => all_angles.add(angle));
+				}
+			});
+			selected_angles = Array.from(all_angles).sort((a, b) => a - b);
+		}
+	}
+
+	const tests_to_render = [];
+	selected_tests.forEach(test => {
+		if (test.test_type === 'rvr_rotation' && selected_angles.length > 0) {
+			selected_angles.forEach(angle => {
+				const filtered_data = test.data.filter(point => point.angle === angle);
+				if (filtered_data.length > 0) {
+					tests_to_render.push({
+						...test,
+						data: filtered_data,
+						display_angle: angle
+					});
+				}
+			});
+		} else {
+			tests_to_render.push(test);
+		}
+	});
+
 	// Define expanded color palette for different test configurations
 	const allColors = [
 		'#00a0c8', '#f72585', '#4361ee', '#ffbe0b', '#fb5607', '#3a0ca3',
@@ -1871,7 +2041,7 @@ function drawChart(selected_tests) {
 
 	// First pass: identify unique device + test configuration + software version combinations
 	const uniqueConfigs = new Set();
-	selected_tests.forEach(test => {
+	tests_to_render.forEach(test => {
 		const deviceName = test.device_info?.Name || test.file_name;
 		const softwareVersion = test.device_info?.['Software Version'] || '';
 		const test_config = formatTestName(test);
@@ -1892,7 +2062,7 @@ function drawChart(selected_tests) {
 
 	// Group tests by DUT model to assign point styles
 	const modelGroups = new Map();
-	selected_tests.forEach(test => {
+	tests_to_render.forEach(test => {
 		const deviceName = test.device_info?.Name || test.file_name;
 		const modelNumber = test.device_info?.['Model Number'] || '';
 		const modelKey = `${deviceName}|${modelNumber}`;
@@ -1943,36 +2113,71 @@ function drawChart(selected_tests) {
 		}
 	});
 
-	const datasets = selected_tests.map((test, index) => {
+	const angle_dash_patterns = [
+		[],
+		[10, 5],
+		[5, 3],
+		[15, 5, 5, 5],
+		[20, 5],
+		[10, 5, 2, 5],
+		[2, 2],
+		[15, 10]
+	];
+
+	const angle_index_map = new Map();
+
+	const datasets = tests_to_render.map((test, index) => {
 		const deviceName = test.device_info?.Name || test.file_name;
 		const softwareVersion = test.device_info?.['Software Version'] || '';
 		const modelNumber = test.device_info?.['Model Number'] || '';
 		const test_config = formatTestName(test);
 		const configKey = `${deviceName}|${softwareVersion}|${test_config}`;
-		const baseColor = configColorMap.get(configKey);
+		let baseColor = configColorMap.get(configKey);
 
-		// Get point style for this test
 		const modelKey = `${deviceName}|${modelNumber}`;
 		const testKey = `${modelKey}|${softwareVersion}|${test_config}|${test.direction}`;
 		const pointStyle = modelStyleMap.get(testKey) || 'circle';
 
-		// Create detailed label based on attenuation 0 data (or first available)
-		const label = `${deviceName} ${softwareVersion ? `v${softwareVersion}` : ''} - ${test_config} ${test.direction}`;
+		let label = `${deviceName} ${softwareVersion ? `v${softwareVersion}` : ''} - ${test_config} ${test.direction}`;
+		if (test.display_angle !== undefined) {
+			label += ` @ ${test.display_angle}°`;
+		}
 
-		// Determine line style based on direction
 		let borderDash = [];
-		if (test.direction.includes('RX')) {
-			borderDash = [5, 5]; // Dotted line for RX
-		} else {
-			borderDash = []; // Solid line for TX
+
+		if (test.display_angle !== undefined) {
+			const angle_group_key = `${configKey}|${test.direction}`;
+			if (!angle_index_map.has(angle_group_key)) {
+				angle_index_map.set(angle_group_key, new Map());
+			}
+			const angle_map = angle_index_map.get(angle_group_key);
+
+			if (!angle_map.has(test.display_angle)) {
+				angle_map.set(test.display_angle, angle_map.size);
+			}
+
+			const angle_idx = angle_map.get(test.display_angle);
+			borderDash = angle_dash_patterns[angle_idx % angle_dash_patterns.length];
+
+			const color_variation = angle_idx * 15;
+			const r = parseInt(baseColor.substring(1, 3), 16);
+			const g = parseInt(baseColor.substring(3, 5), 16);
+			const b = parseInt(baseColor.substring(5, 7), 16);
+
+			const new_r = Math.min(255, Math.max(0, r + color_variation));
+			const new_g = Math.min(255, Math.max(0, g + color_variation));
+			const new_b = Math.min(255, Math.max(0, b + color_variation));
+
+			baseColor = `#${new_r.toString(16).padStart(2, '0')}${new_g.toString(16).padStart(2, '0')}${new_b.toString(16).padStart(2, '0')}`;
+		} else if (test.direction.includes('RX')) {
+			borderDash = [5, 5];
 		}
 
 		return {
 			label: label,
 			data: test.data.map(point => ({
-				x: point.attenuation,
+				x: is_pure_rotation ? (point.angle !== null ? point.angle : 0) : point.attenuation,
 				y: point.throughput,
-				// Store the full point data for tooltip access
 				pointData: point
 			})),
 			borderColor: baseColor,
@@ -1982,13 +2187,12 @@ function drawChart(selected_tests) {
 			pointHoverRadius: 6,
 			pointStyle: pointStyle,
 			tension: 0.2,
-			// Line style based on direction
 			borderDash: borderDash,
-			// Add custom properties for grouping
 			deviceName: deviceName,
 			test_config: test_config,
-			// Store reference to the full test for tooltip access
-			fullTest: test
+			fullTest: test,
+			display_angle: test.display_angle,
+			software_version: softwareVersion
 		};
 	});
 
@@ -2017,7 +2221,7 @@ function drawChart(selected_tests) {
 				},
 				subtitle: {
 					display: !is_small_screen,
-					text: `Comparing ${uniqueConfigs.size} test configuration(s) across ${Array.from(new Set(selected_tests.map(t => t.device_info?.Name || t.file_name))).length} device(s) | Solid: TX, Dotted: RX | Different point styles for multiple tests per DUT model`,
+					text: `Comparing ${uniqueConfigs.size} test configuration(s) across ${Array.from(new Set(tests_to_render.map(t => t.device_info?.Name || t.file_name))).length} device(s) | Solid: TX, Dotted: RX | Different point styles for multiple tests per DUT model`,
 					color: '#aaa',
 					font: {
 						size: is_small_screen ? 10 : 14,
@@ -2028,6 +2232,16 @@ function drawChart(selected_tests) {
 					...responsive_config.plugins.legend,
 					align: 'start',
 					fullSize: false,
+					onClick: function(e, legendItem, legend) {
+						if (legendItem.index === -1) {
+							return;
+						}
+						const index = legendItem.datasetIndex;
+						const chart = legend.chart;
+						const meta = chart.getDatasetMeta(index);
+						meta.hidden = !meta.hidden;
+						chart.update();
+					},
 					title: {
 						display: false,
 						text: 'Legend shows baseline (0dB) configuration - hover points for actual PHY parameters',
@@ -2050,16 +2264,70 @@ function drawChart(selected_tests) {
 							family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif"
 						},
 						generateLabels: function(chart) {
-							// Get default labels
-							const labels = Chart.defaults.plugins.legend.labels.generateLabels(chart);
-							// Truncate long labels if needed
-							const maxLength = is_small_screen ? 40 : 60;
-							return labels.map(label => {
-								if (label.text.length > maxLength) {
-									label.text = label.text.substring(0, maxLength - 3) + '...';
+							const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+
+							const grouped = new Map();
+
+							original.forEach((item, idx) => {
+								const dataset = chart.data.datasets[item.datasetIndex];
+								if (!dataset) {
+									return;
 								}
-								return label;
+
+								const has_angle = dataset.display_angle !== undefined && dataset.display_angle !== null;
+
+								if (has_angle) {
+									const group_key = `${dataset.deviceName}|${dataset.software_version}|${dataset.test_config}|${dataset.fullTest.direction}`;
+
+									if (!grouped.has(group_key)) {
+										grouped.set(group_key, {
+											header: `${dataset.deviceName} ${dataset.software_version ? `v${dataset.software_version}` : ''} - ${dataset.test_config} ${dataset.fullTest.direction}`,
+											items: []
+										});
+									}
+
+									grouped.get(group_key).items.push({
+										...item,
+										text: `  Rotation: ${dataset.display_angle}°`,
+										angle: dataset.display_angle
+									});
+								} else {
+									const maxLength = is_small_screen ? 40 : 60;
+									let text = item.text;
+									if (text.length > maxLength) {
+										text = text.substring(0, maxLength - 3) + '...';
+									}
+									grouped.set(`ungrouped_${idx}`, {
+										header: null,
+										items: [{...item, text}]
+									});
+								}
 							});
+
+							const result = [];
+							grouped.forEach((group, key) => {
+								if (group.header) {
+									result.push({
+										text: group.header,
+										fillStyle: 'transparent',
+										strokeStyle: 'transparent',
+										lineWidth: 0,
+										hidden: false,
+										index: -1,
+										datasetIndex: -1,
+										fontColor: '#e0e0e0',
+										fontStyle: 'bold'
+									});
+
+									group.items.sort((a, b) => a.angle - b.angle);
+								}
+
+								group.items.forEach(item => {
+									result.push(item);
+								});
+							});
+
+							return result;
 						}
 					}
 				},
@@ -2068,7 +2336,11 @@ function drawChart(selected_tests) {
 					callbacks: {
 						title: function(tooltipItems) {
 							if (tooltipItems.length > 0) {
-								return `Attenuation: ${tooltipItems[0].parsed.x} dB`;
+								if (is_pure_rotation) {
+									return `Angle: ${tooltipItems[0].parsed.x}°`;
+								} else {
+									return `Attenuation: ${tooltipItems[0].parsed.x} dB`;
+								}
 							}
 							return '';
 						},
@@ -2126,6 +2398,11 @@ function drawChart(selected_tests) {
 									lines.push(` Frequency: ${point.frequency} MHz`);
 								}
 
+								// Show angle if available (for rotation tests)
+								if (point.angle !== null && point.angle !== undefined) {
+									lines.push(` Angle: ${point.angle}°`);
+								}
+
 								// Show if parameters have degraded from test configuration
 								if (dataIndex > 0 && fullTest.data && fullTest.data[0]) {
 									const degradations = [];
@@ -2174,7 +2451,7 @@ function drawChart(selected_tests) {
 					display: true,
 					title: {
 						display: true,
-						text: 'Attenuation (dB)',
+						text: is_pure_rotation ? 'Rotation Angle (degrees)' : 'Attenuation (dB)',
 						color: '#e0e0e0',
 						font: {
 							size: 14,
@@ -2187,7 +2464,15 @@ function drawChart(selected_tests) {
 					},
 					ticks: {
 						color: '#e0e0e0'
-					}
+					},
+					...(is_pure_rotation ? {
+						min: 0,
+						max: 360,
+						ticks: {
+							color: '#e0e0e0',
+							stepSize: 45
+						}
+					} : {})
 				},
 				y: {
 					display: true,

@@ -190,6 +190,21 @@
 						<button class="chart-button chart-button-clear" onclick="clear_chart_selection()">Clear Selection</button>
 					</div>
 				</div>
+
+				<div class="rotation-controls" id="rotationControls" style="display: none;">
+					<div class="rotation-control-section">
+						<label>Select Angles to Display:</label>
+						<div id="angleCheckboxes" class="angle-checkbox-group"></div>
+					</div>
+				</div>
+
+				<div class="attenuation-filter" id="attenuationFilter" style="display: none;">
+					<label for="attenuationSelect">Compare at attenuation level:</label>
+					<select id="attenuationSelect" onchange="update_rotation_chart()">
+						<option value="">All angles (default view)</option>
+					</select>
+				</div>
+
 				<div class="chart-wrapper">
 					<canvas id="rvrChart"></canvas>
 				</div>
