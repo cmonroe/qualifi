@@ -4,6 +4,7 @@ let loaded_files = new Map();
 let chart_type = 'line';
 let server_reports = null;
 let selected_server_reports = new Set();
+let report_files_map = new Map();
 let active_notifications = [];
 let current_view_mode = 'cartesian';
 let polar_attenuation_values = [];
@@ -406,6 +407,7 @@ function render_report_browser(data) {
 							<input type="checkbox" class="version-checkbox"
 								   id="report-${report_id.replace(/[|\/\s]/g, '_')}"
 								   value="${report_id}"
+								   ${selected_server_reports.has(report_id) ? 'checked' : ''}
 								   onchange="toggle_report_selection('${report_id}')">
 							<div class="version-info">
 								<span class="version-label">v${version}</span>
@@ -537,12 +539,71 @@ function toggle_model(model_id) {
 }
 
 // Toggle report selection
-function toggle_report_selection(report_id) {
+async function toggle_report_selection(report_id) {
+	const checkbox = document.getElementById(`report-${report_id.replace(/[|\/\s]/g, '_')}`);
+
 	if (selected_server_reports.has(report_id)) {
 		selected_server_reports.delete(report_id);
+
+		const files_to_remove = report_files_map.get(report_id) || [];
+		files_to_remove.forEach(file_name => {
+			loaded_files.delete(file_name);
+		});
+		report_files_map.delete(report_id);
+
+		if (files_to_remove.length > 0) {
+			update_file_list();
+			update_test_options();
+		}
 	} else {
 		selected_server_reports.add(report_id);
+
+		checkbox.disabled = true;
+
+		const [vendor, model, version] = report_id.split('|');
+		const version_data = server_reports?.vendors?.[vendor]?.models?.[model]?.versions?.[version];
+
+		if (!version_data || !version_data.test_configs) {
+			console.error('Version data not found for:', report_id);
+			selected_server_reports.delete(report_id);
+			checkbox.checked = false;
+			checkbox.disabled = false;
+			return;
+		}
+
+		const loaded_file_names = [];
+		let total_test_configs = 0;
+
+		for (const [test_config, test_config_data] of Object.entries(version_data.test_configs)) {
+			try {
+				const response = await fetch(`/reports/${test_config_data.path}`);
+				if (!response.ok) {
+					console.error(`Failed to fetch ${test_config_data.path}: ${response.status}`);
+					continue;
+				}
+
+				const blob = await response.blob();
+				const file_name = `${vendor}_${model}_v${version}_${test_config}_${test_config_data.name}`;
+				const virtualFile = new File([blob], file_name, { type: blob.type });
+
+				const test_config_count = await load_excel_file(virtualFile, true, test_config_data.path, true);
+				if (test_config_count > 0) {
+					loaded_file_names.push(file_name);
+					total_test_configs += test_config_count;
+				}
+			} catch (fetchError) {
+				console.error(`Error loading test config ${test_config}:`, fetchError);
+			}
+		}
+
+		report_files_map.set(report_id, loaded_file_names);
+		checkbox.disabled = false;
+
+		if (total_test_configs > 0) {
+			show_success(`Loaded ${total_test_configs} test configuration${total_test_configs > 1 ? 's' : ''} from ${vendor} ${model} v${version}`);
+		}
 	}
+
 	update_selected_reports_list();
 }
 
@@ -574,10 +635,22 @@ function update_selected_reports_list() {
 
 // Remove selected report
 function remove_selected_report(report_id) {
+	const files_to_remove = report_files_map.get(report_id) || [];
+	files_to_remove.forEach(file_name => {
+		loaded_files.delete(file_name);
+	});
+	report_files_map.delete(report_id);
+
 	selected_server_reports.delete(report_id);
-	// Uncheck the checkbox
+
 	const checkbox = document.querySelector(`input[value="${report_id}"]`);
 	if (checkbox) checkbox.checked = false;
+
+	if (files_to_remove.length > 0) {
+		update_file_list();
+		update_test_options();
+	}
+
 	update_selected_reports_list();
 }
 
@@ -608,30 +681,31 @@ function collapse_all_vendors() {
 }
 
 // Select latest version from each model
-function select_latest_versions() {
+async function select_latest_versions() {
 	if (!server_reports) return;
 
-	selected_server_reports.clear();
+	const latest_report_ids = [];
 
 	Object.entries(server_reports.vendors).forEach(([vendor, vendor_data]) => {
 		Object.entries(vendor_data.models).forEach(([model, model_data]) => {
-			// Get versions and sort them (assuming semantic versioning)
 			const versions = Object.keys(model_data.versions).sort((a, b) => {
-				return compare_versions(b, a); // Sort descending
+				return compare_versions(b, a);
 			});
 
 			if (versions.length > 0 && Object.keys(model_data.versions[versions[0]].test_configs).length > 0) {
 				const report_id = `${vendor}|${model}|${versions[0]}`;
-				selected_server_reports.add(report_id);
-
-				// Check the checkbox
-				const checkbox = document.querySelector(`input[value="${report_id}"]`);
-				if (checkbox) checkbox.checked = true;
+				latest_report_ids.push(report_id);
 			}
 		});
 	});
 
-	update_selected_reports_list();
+	for (const report_id of latest_report_ids) {
+		const checkbox = document.querySelector(`input[value="${report_id}"]`);
+		if (checkbox && !checkbox.checked) {
+			checkbox.checked = true;
+			await toggle_report_selection(report_id);
+		}
+	}
 }
 
 // Compare version strings
@@ -818,7 +892,7 @@ async function handle_files(files) {
 	}
 }
 
-async function load_excel_file(file, from_server = false, server_path = null) {
+async function load_excel_file(file, from_server = false, server_path = null, suppress_notification = false) {
 	console.log(`Loading file: ${file.name}${from_server ? ' (from server)' : ' (local)'}`);
 	try {
 		const array_buffer = await file.arrayBuffer();
@@ -828,10 +902,8 @@ async function load_excel_file(file, from_server = false, server_path = null) {
 			cellStyles: true
 		});
 
-		// Extract device information
 		const device_info = extract_device_info(workbook);
 
-		// Extract RvR data
 		const rvrResult = extract_rvr_data(workbook);
 		const rvr_data = rvrResult.tests;
 		const skipped_count = rvrResult.skipped_count;
@@ -843,14 +915,12 @@ async function load_excel_file(file, from_server = false, server_path = null) {
 			return;
 		}
 
-		// Add server path information to each test if loaded from server
 		if (from_server && server_path) {
 			rvr_data.forEach(test => {
 				test.server_path = server_path;
 			});
 		}
 
-		// Store the loaded file data
 		loaded_files.set(file.name, {
 			device_info: device_info,
 			rvr_data: rvr_data,
@@ -859,22 +929,24 @@ async function load_excel_file(file, from_server = false, server_path = null) {
 			server_path: server_path
 		});
 
-		// Only update UI if not in batch loading mode
 		if (!is_batch_loading) {
 			update_file_list();
 			update_test_options();
 
-			// Show success message with data summary
 			const total_data_points = rvr_data.reduce((sum, test) => sum + test.data.length, 0);
 			console.log(`Successfully loaded ${file.name}: ${rvr_data.length} test configurations, ${total_data_points} data points`);
 
-			// Show brief success notification
-			show_success(`Loaded ${file.name} - ${rvr_data.length} test configurations`);
+			if (!suppress_notification) {
+				show_success(`Loaded ${file.name} - ${rvr_data.length} test configurations`);
+			}
 		}
+
+		return rvr_data.length;
 
 	} catch (error) {
 		console.error('Error loading Excel file:', error);
 		show_error(`Failed to load ${file.name}: ${error.message}`);
+		return 0;
 	}
 }
 
@@ -1394,12 +1466,20 @@ function removeFile(file_name) {
 function clearAllFiles() {
 	if (loaded_files.size > 0 && confirm('Remove all loaded files?')) {
 		loaded_files.clear();
+		report_files_map.clear();
+		selected_server_reports.clear();
+
+		document.querySelectorAll('.version-checkbox:checked').forEach(cb => {
+			cb.checked = false;
+		});
+
 		update_file_list();
 		update_test_options();
+		update_selected_reports_list();
 		document.querySelector('.chart-container').style.display = 'none';
 		document.querySelector('.stats-panel').style.display = 'none';
 		document.querySelector('#comparisonPanel').style.display = 'none';
-		// Reset file input
+
 		document.getElementById('excelFile').value = '';
 	}
 }
@@ -1410,16 +1490,23 @@ function clear_server_files() {
 		serverFiles.forEach(([file_name, _]) => {
 			loaded_files.delete(file_name);
 		});
+
+		report_files_map.clear();
+		selected_server_reports.clear();
+
+		document.querySelectorAll('.version-checkbox:checked').forEach(cb => {
+			cb.checked = false;
+		});
+
 		update_file_list();
 		update_test_options();
+		update_selected_reports_list();
 	}
 }
 
 function clearDeviceModel(modelKey) {
-	// Extract device name and model from the key
 	const [deviceName, model] = modelKey.split('|');
 
-	// Find all files for this device/model combination
 	const filesToRemove = [];
 	loaded_files.forEach((data, file_name) => {
 		const fileDeviceName = data.device_info?.Name || 'Unknown Device';
@@ -1435,8 +1522,25 @@ function clearDeviceModel(modelKey) {
 		filesToRemove.forEach(file_name => {
 			loaded_files.delete(file_name);
 		});
+
+		const report_ids_to_remove = [];
+		report_files_map.forEach((file_list, report_id) => {
+			const has_removed_files = file_list.some(fn => filesToRemove.includes(fn));
+			if (has_removed_files) {
+				report_ids_to_remove.push(report_id);
+			}
+		});
+
+		report_ids_to_remove.forEach(report_id => {
+			report_files_map.delete(report_id);
+			selected_server_reports.delete(report_id);
+			const checkbox = document.querySelector(`input[value="${report_id}"]`);
+			if (checkbox) checkbox.checked = false;
+		});
+
 		update_file_list();
 		update_test_options();
+		update_selected_reports_list();
 	}
 }
 
