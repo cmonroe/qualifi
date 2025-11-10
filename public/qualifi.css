@@ -1006,6 +1006,80 @@ main {
 	height: 700px !important;
 }
 
+#polarChart {
+	width: 100%;
+	height: 700px;
+}
+
+.polar-attenuation-slider {
+	background-color: var(--bg-secondary);
+	border: 1px solid var(--border-subtle);
+	border-radius: 8px;
+	padding: var(--space-md);
+	margin-bottom: var(--space-lg);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-sm);
+}
+
+.polar-attenuation-slider label {
+	font-weight: 600;
+	color: var(--text-primary);
+	font-size: 0.9rem;
+	display: flex;
+	align-items: center;
+	gap: var(--space-sm);
+}
+
+.polar-attenuation-slider input[type="range"] {
+	width: 100%;
+	height: 6px;
+	background: linear-gradient(90deg, var(--bg-tertiary) 0%, var(--accent-primary) 100%);
+	border-radius: 3px;
+	outline: none;
+	-webkit-appearance: none;
+	cursor: pointer;
+}
+
+.polar-attenuation-slider input[type="range"]::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 18px;
+	height: 18px;
+	background: var(--accent-primary);
+	border: 2px solid var(--text-primary);
+	border-radius: 50%;
+	cursor: pointer;
+	transition: all var(--transition-fast);
+}
+
+.polar-attenuation-slider input[type="range"]::-webkit-slider-thumb:hover {
+	background: var(--text-primary);
+	transform: scale(1.1);
+}
+
+.polar-attenuation-slider input[type="range"]::-moz-range-thumb {
+	width: 18px;
+	height: 18px;
+	background: var(--accent-primary);
+	border: 2px solid var(--text-primary);
+	border-radius: 50%;
+	cursor: pointer;
+	transition: all var(--transition-fast);
+}
+
+.polar-attenuation-slider input[type="range"]::-moz-range-thumb:hover {
+	background: var(--text-primary);
+	transform: scale(1.1);
+}
+
+#polarAttenuationValue {
+	color: var(--accent-primary);
+	font-weight: var(--font-weight-bold);
+	min-width: 60px;
+	text-align: right;
+}
+
 /* Stats Panel - Data Grid */
 .stats-panel {
 	background-color: var(--bg-secondary);
@@ -1503,6 +1577,25 @@ main {
 		width: 100% !important; /* Remove min-width to prevent horizontal scroll */
 	}
 
+	#polarChart {
+		height: 350px;
+	}
+
+	.polar-attenuation-slider {
+		padding: var(--space-sm);
+	}
+
+	.polar-attenuation-slider label {
+		font-size: 0.8125rem;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--space-xs);
+	}
+
+	#polarAttenuationValue {
+		text-align: left;
+	}
+
 	/* Mobile report browser */
 	.report-browser {
 		max-height: 400px;
@@ -1810,6 +1903,10 @@ main {
 
 	#rvrChart {
 		height: 280px !important;
+	}
+
+	#polarChart {
+		height: 280px;
 	}
 
 	.header-content {

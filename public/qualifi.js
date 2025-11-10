@@ -5,6 +5,9 @@ let chart_type = 'line';
 let server_reports = null;
 let selected_server_reports = new Set();
 let active_notifications = [];
+let current_view_mode = 'cartesian';
+let polar_attenuation_values = [];
+let current_polar_attenuation = 0;
 
 // Touch and responsive detection
 let is_touch_device = false;
@@ -1628,8 +1631,9 @@ function createTestTable(tests, deviceName, startIndex) {
 			<th>BW</th>
 			<th>NSS</th>
 			<th>Mode</th>
+			<th style="width: 70px;">Rotation</th>
 			<th>Version</th>
-			<th style="width: 80px;">Files</th>
+			<th style="width: 55px; white-space: nowrap;">Files</th>
 		</tr>
 	`;
 	table.appendChild(thead);
@@ -1685,19 +1689,29 @@ function createTestTable(tests, deviceName, startIndex) {
 		// Mode cell
 		const modeCell = document.createElement('td');
 		modeCell.setAttribute('data-label', 'Mode');
-		let mode_text = test.mode || 'Unknown';
-		if (test.has_rotation && test.angle_increment > 0) {
-			mode_text += ` (Rotation: ${test.angle_increment}° steps)`;
-		}
-		modeCell.textContent = mode_text;
+		modeCell.textContent = test.mode || 'Unknown';
 		modeCell.style.color = '#ccc';
 		modeCell.style.fontWeight = '700';
 		row.appendChild(modeCell);
+
+		// Rotation cell
+		const rotationCell = document.createElement('td');
+		rotationCell.setAttribute('data-label', 'Rotation');
+		if (test.has_rotation && test.angle_increment > 0) {
+			rotationCell.textContent = `${test.angle_increment}°`;
+			rotationCell.style.color = '#ccc';
+			rotationCell.style.fontWeight = '700';
+		} else {
+			rotationCell.textContent = '-';
+			rotationCell.style.color = '#666';
+		}
+		row.appendChild(rotationCell);
 
 		// Version cell
 		const versionCell = document.createElement('td');
 		versionCell.className = 'version-cell';
 		versionCell.setAttribute('data-label', 'Version');
+		versionCell.style.whiteSpace = 'nowrap';
 		const version = test.device_info?.['Software Version'] || 'Unknown';
 		versionCell.textContent = `v${version}`;
 		row.appendChild(versionCell);
@@ -1707,6 +1721,7 @@ function createTestTable(tests, deviceName, startIndex) {
 		fileCell.className = 'file-cell';
 		fileCell.setAttribute('data-label', 'Files');
 		fileCell.style.textAlign = 'left';
+		fileCell.style.whiteSpace = 'nowrap';
 
 		if (test.from_server && test.server_path) {
 			// Use the original server path to construct download URLs
@@ -1955,7 +1970,65 @@ function updateChart() {
 	document.querySelector('.chart-container').style.display = 'block';
 	document.querySelector('.stats-panel').style.display = 'block';
 
-	drawChart(selected_tests);
+	const has_rotation_data = selected_tests.some(t => t.has_rotation);
+	const view_mode_toggle = document.getElementById('viewModeToggle');
+	const polar_slider = document.getElementById('polarAttenuationSlider');
+
+	if (has_rotation_data) {
+		view_mode_toggle.style.display = 'inline-block';
+
+		if (current_view_mode === 'polar') {
+			document.getElementById('cartesianChartWrapper').style.display = 'none';
+			document.getElementById('polarChartWrapper').style.display = 'block';
+			document.getElementById('rotationControls').style.display = 'none';
+
+			if (has_rvr_rotation) {
+				const all_attenuations = new Set();
+				selected_tests.forEach(t => {
+					if (t.test_type === 'rvr_rotation') {
+						t.data.forEach(point => {
+							if (point.attenuation !== null) {
+								all_attenuations.add(point.attenuation);
+							}
+						});
+					}
+				});
+				polar_attenuation_values = Array.from(all_attenuations).sort((a, b) => a - b);
+
+				if (polar_attenuation_values.length > 0) {
+					polar_slider.style.display = 'flex';
+					const slider_input = document.getElementById('polarAttenuationInput');
+					slider_input.max = 100;
+					slider_input.value = 0;
+					current_polar_attenuation = polar_attenuation_values[0];
+					document.getElementById('polarAttenuationValue').textContent = `${current_polar_attenuation} dB`;
+					draw_polar_chart(selected_tests, current_polar_attenuation);
+				} else {
+					polar_slider.style.display = 'none';
+					draw_polar_chart(selected_tests, null);
+				}
+			} else {
+				polar_slider.style.display = 'none';
+				draw_polar_chart(selected_tests, null);
+			}
+		} else {
+			document.getElementById('cartesianChartWrapper').style.display = 'block';
+			document.getElementById('polarChartWrapper').style.display = 'none';
+			polar_slider.style.display = 'none';
+			if (show_angle_selector) {
+				document.getElementById('rotationControls').style.display = 'block';
+			}
+			drawChart(selected_tests);
+		}
+	} else {
+		view_mode_toggle.style.display = 'none';
+		polar_slider.style.display = 'none';
+		document.getElementById('cartesianChartWrapper').style.display = 'block';
+		document.getElementById('polarChartWrapper').style.display = 'none';
+		current_view_mode = 'cartesian';
+		drawChart(selected_tests);
+	}
+
 	updateStats(selected_tests);
 
 	// Show comparison panel if comparing multiple devices
@@ -2231,7 +2304,6 @@ function drawChart(selected_tests) {
 				legend: {
 					...responsive_config.plugins.legend,
 					align: 'start',
-					fullSize: false,
 					onClick: function(e, legendItem, legend) {
 						if (legendItem.index === -1) {
 							return;
@@ -2280,8 +2352,17 @@ function drawChart(selected_tests) {
 									const group_key = `${dataset.deviceName}|${dataset.software_version}|${dataset.test_config}|${dataset.fullTest.direction}`;
 
 									if (!grouped.has(group_key)) {
+										let header_text = `${dataset.deviceName} ${dataset.software_version ? `v${dataset.software_version}` : ''} - ${dataset.test_config} ${dataset.fullTest.direction}`;
+
+										const rotation_match = header_text.match(/\(Rotation: [^)]+\)/);
+										if (rotation_match) {
+											const rotation_part = rotation_match[0];
+											header_text = header_text.replace(rotation_part, '').replace(/\s+/g, ' ').trim();
+											header_text = `${header_text} ${rotation_part}`;
+										}
+
 										grouped.set(group_key, {
-											header: `${dataset.deviceName} ${dataset.software_version ? `v${dataset.software_version}` : ''} - ${dataset.test_config} ${dataset.fullTest.direction}`,
+											header: header_text,
 											items: []
 										});
 									}
@@ -2292,8 +2373,16 @@ function drawChart(selected_tests) {
 										angle: dataset.display_angle
 									});
 								} else {
-									const maxLength = is_small_screen ? 40 : 60;
 									let text = item.text;
+
+									const rotation_match = text.match(/\(Rotation: [^)]+\)/);
+									if (rotation_match) {
+										const rotation_part = rotation_match[0];
+										text = text.replace(rotation_part, '').replace(/\s+/g, ' ').trim();
+										text = `${text} ${rotation_part}`;
+									}
+
+									const maxLength = is_small_screen ? 40 : 90;
 									if (text.length > maxLength) {
 										text = text.substring(0, maxLength - 3) + '...';
 									}
@@ -2496,6 +2585,225 @@ function drawChart(selected_tests) {
 			}
 		}
 	});
+}
+
+function draw_polar_chart(selected_tests, attenuation_filter = null) {
+	const polar_chart_div = document.getElementById('polarChart');
+
+	const test_types = new Set(selected_tests.map(t => t.test_type || 'rvr'));
+	const is_pure_rotation = test_types.has('rotation') && test_types.size === 1;
+	const has_rvr_rotation = test_types.has('rvr_rotation');
+
+	const traces = [];
+	const colors = ['#0080ff', '#ff3b30', '#00c896', '#ff9500', '#5856d6', '#ff2d55', '#ffcc00', '#34c759'];
+	let color_index = 0;
+
+	selected_tests.forEach((test, test_idx) => {
+		if (!test.has_rotation) {
+			return;
+		}
+
+		let data_to_plot = test.data;
+
+		if (attenuation_filter !== null && test.test_type === 'rvr_rotation') {
+			data_to_plot = test.data.filter(point =>
+				point.attenuation !== null &&
+				Math.abs(point.attenuation - attenuation_filter) < 0.1
+			);
+		}
+
+		const angle_map = new Map();
+		data_to_plot.forEach(point => {
+			if (point.angle !== null && point.throughput !== null) {
+				if (!angle_map.has(point.angle)) {
+					angle_map.set(point.angle, []);
+				}
+				angle_map.set(point.angle, [...angle_map.get(point.angle), point.throughput]);
+			}
+		});
+
+		const angles = [];
+		const throughputs = [];
+		Array.from(angle_map.keys()).sort((a, b) => a - b).forEach(angle => {
+			const values = angle_map.get(angle);
+			const avg_throughput = values.reduce((sum, val) => sum + val, 0) / values.length;
+			angles.push(angle);
+			throughputs.push(avg_throughput);
+		});
+
+		if (angles.length > 0 && angles[angles.length - 1] !== angles[0]) {
+			angles.push(angles[0]);
+			throughputs.push(throughputs[0]);
+		}
+
+		const device_name = test.device_info?.Name || test.file_name || 'Unknown';
+		const software_version = test.device_info?.['Software Version'] || '';
+		const test_config = formatTestName(test);
+		const direction = test.direction || 'Unknown';
+		let trace_name = `${device_name} ${software_version ? `v${software_version}` : ''} - ${test_config} ${direction}`;
+
+		const rotation_match = trace_name.match(/\(Rotation: [^)]+\)/);
+		if (rotation_match) {
+			const rotation_part = rotation_match[0];
+			trace_name = trace_name.replace(rotation_part, '').replace(/\s+/g, ' ').trim();
+			trace_name = `${trace_name} ${rotation_part}`;
+		}
+
+		const color = colors[color_index % colors.length];
+		color_index++;
+
+		const is_rx = direction.toLowerCase().includes('rx');
+		const line_style = is_rx ? 'dash' : 'solid';
+
+		traces.push({
+			type: 'scatterpolar',
+			mode: 'lines+markers',
+			r: throughputs,
+			theta: angles,
+			name: trace_name,
+			line: {
+				color: color,
+				width: 2,
+				dash: line_style
+			},
+			marker: {
+				size: 6,
+				color: color,
+				symbol: 'circle'
+			}
+		});
+	});
+
+	if (traces.length === 0) {
+		polar_chart_div.innerHTML = '<div style="text-align: center; padding: 100px; color: #888;">No rotation data available for polar plot</div>';
+		return;
+	}
+
+	const layout = {
+		polar: {
+			radialaxis: {
+				title: {
+					text: 'Throughput (Mbps)',
+					font: {
+						family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', monospace" : "'Poppins', sans-serif",
+						size: 14,
+						color: '#e0e0e0'
+					}
+				},
+				visible: true,
+				range: [0, null],
+				color: '#e0e0e0',
+				gridcolor: '#333',
+				tickfont: {
+					color: '#e0e0e0'
+				}
+			},
+			angularaxis: {
+				direction: 'clockwise',
+				rotation: 90,
+				thetaunit: 'degrees',
+				tickmode: 'linear',
+				tick0: 0,
+				dtick: 45,
+				color: '#e0e0e0',
+				gridcolor: '#333',
+				tickfont: {
+					color: '#e0e0e0'
+				}
+			},
+			bgcolor: 'rgba(0, 0, 0, 0)'
+		},
+		showlegend: true,
+		legend: {
+			font: {
+				family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', monospace" : "'Poppins', sans-serif",
+				size: 10,
+				color: '#e0e0e0'
+			},
+			bgcolor: 'rgba(20, 20, 20, 0.8)',
+			bordercolor: '#333',
+			borderwidth: 1,
+			orientation: 'h',
+			x: 0.5,
+			y: 1.15,
+			xanchor: 'center',
+			yanchor: 'bottom'
+		},
+		paper_bgcolor: '#0a0a0a',
+		plot_bgcolor: '#0a0a0a',
+		font: {
+			family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', monospace" : "'Poppins', sans-serif",
+			color: '#e0e0e0'
+		},
+		margin: {
+			l: 80,
+			r: 80,
+			t: 120,
+			b: 80
+		},
+		hovermode: 'closest'
+	};
+
+	const config = {
+		responsive: true,
+		displayModeBar: true,
+		displaylogo: false,
+		modeBarButtonsToRemove: ['lasso2d', 'select2d']
+	};
+
+	Plotly.newPlot(polar_chart_div, traces, layout, config);
+}
+
+function toggle_view_mode() {
+	const toggle_btn = document.getElementById('viewModeToggle');
+	const cartesian_wrapper = document.getElementById('cartesianChartWrapper');
+	const polar_wrapper = document.getElementById('polarChartWrapper');
+	const toggle_chart_type_btn = document.querySelector('.chart-button[onclick="toggleChartType()"]');
+
+	if (current_view_mode === 'cartesian') {
+		current_view_mode = 'polar';
+		toggle_btn.textContent = 'Switch to Standard View';
+		cartesian_wrapper.style.display = 'none';
+		polar_wrapper.style.display = 'block';
+		if (toggle_chart_type_btn) toggle_chart_type_btn.style.display = 'none';
+		updateChart();
+	} else {
+		current_view_mode = 'cartesian';
+		toggle_btn.textContent = 'Switch to Polar View';
+		cartesian_wrapper.style.display = 'block';
+		polar_wrapper.style.display = 'none';
+		if (toggle_chart_type_btn) toggle_chart_type_btn.style.display = 'inline-block';
+		updateChart();
+	}
+}
+
+function update_polar_attenuation() {
+	const slider = document.getElementById('polarAttenuationInput');
+	const value_display = document.getElementById('polarAttenuationValue');
+	const slider_value = parseFloat(slider.value);
+
+	if (polar_attenuation_values.length > 0) {
+		const idx = Math.round((slider_value / 100) * (polar_attenuation_values.length - 1));
+		current_polar_attenuation = polar_attenuation_values[idx];
+		value_display.textContent = `${current_polar_attenuation} dB`;
+
+		const selected_tests = [];
+		const checkboxes = document.querySelectorAll('.test-checkbox:checked');
+		checkboxes.forEach(cb => {
+			const [file_name, test_name] = cb.value.split('|');
+			const fileData = loaded_files.get(file_name);
+			const test = fileData.rvr_data.find(t => t.name === test_name);
+			if (test) {
+				selected_tests.push({
+					...test,
+					file_name: file_name,
+					device_info: fileData.device_info
+				});
+			}
+		});
+
+		draw_polar_chart(selected_tests, current_polar_attenuation);
+	}
 }
 
 function updateStats(selected_tests) {
