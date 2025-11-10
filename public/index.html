@@ -10,6 +10,7 @@
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 	<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/gifshot@0.4.5/dist/gifshot.min.js"></script>
 	<script>
 		// Dynamic font loading - try Berkeley Mono first, fallback to Poppins
 		(function() {
@@ -183,6 +184,7 @@
 						<button class="chart-button" id="viewModeToggle" onclick="toggle_view_mode()" style="display: none;">Switch to Polar View</button>
 						<button class="chart-button" onclick="toggleChartType()">Toggle Chart Type</button>
 						<button class="chart-button" onclick="export_chart()">Export Chart</button>
+						<button class="chart-button" id="exportGifButton" onclick="export_polar_gif()" style="display: none;">Export GIF</button>
 						<button class="chart-button" onclick="export_csv()">Export CSV Data</button>
 					</div>
 					<div class="chart-controls-right">

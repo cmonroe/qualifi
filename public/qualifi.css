@@ -874,6 +874,10 @@ main {
 	min-height: 800px;
 }
 
+.chart-container.polar-mode {
+	min-height: 1000px;
+}
+
 .chart-controls {
 	display: flex;
 	justify-content: space-between;
@@ -1000,6 +1004,10 @@ main {
 	overflow: visible;
 }
 
+.chart-container.polar-mode .chart-wrapper {
+	height: 900px;
+}
+
 #rvrChart {
 	display: block !important;
 	width: 100% !important;
@@ -1008,7 +1016,7 @@ main {
 
 #polarChart {
 	width: 100%;
-	height: 700px;
+	height: 900px;
 }
 
 .polar-attenuation-slider {
@@ -1857,8 +1865,16 @@ main {
 		padding: var(--space-lg);
 	}
 
+	.chart-container.polar-mode {
+		min-height: 1000px !important;
+	}
+
 	.chart-wrapper {
 		height: 700px !important;
+	}
+
+	.chart-container.polar-mode .chart-wrapper {
+		height: 900px !important;
 	}
 
 	#rvrChart {

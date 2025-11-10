@@ -2077,6 +2077,7 @@ function updateChart() {
 	const has_rotation_data = selected_tests.some(t => t.has_rotation);
 	const view_mode_toggle = document.getElementById('viewModeToggle');
 	const polar_slider = document.getElementById('polarAttenuationSlider');
+	const export_gif_button = document.getElementById('exportGifButton');
 
 	if (has_rotation_data) {
 		view_mode_toggle.style.display = 'inline-block';
@@ -2101,6 +2102,7 @@ function updateChart() {
 
 				if (polar_attenuation_values.length > 0) {
 					polar_slider.style.display = 'flex';
+					export_gif_button.style.display = 'inline-block';
 					const slider_input = document.getElementById('polarAttenuationInput');
 					slider_input.max = 100;
 					slider_input.value = 0;
@@ -2109,16 +2111,19 @@ function updateChart() {
 					draw_polar_chart(selected_tests, current_polar_attenuation);
 				} else {
 					polar_slider.style.display = 'none';
+					export_gif_button.style.display = 'none';
 					draw_polar_chart(selected_tests, null);
 				}
 			} else {
 				polar_slider.style.display = 'none';
+				export_gif_button.style.display = 'none';
 				draw_polar_chart(selected_tests, null);
 			}
 		} else {
 			document.getElementById('cartesianChartWrapper').style.display = 'block';
 			document.getElementById('polarChartWrapper').style.display = 'none';
 			polar_slider.style.display = 'none';
+			export_gif_button.style.display = 'none';
 			if (show_angle_selector) {
 				document.getElementById('rotationControls').style.display = 'block';
 			}
@@ -2127,6 +2132,7 @@ function updateChart() {
 	} else {
 		view_mode_toggle.style.display = 'none';
 		polar_slider.style.display = 'none';
+		export_gif_button.style.display = 'none';
 		document.getElementById('cartesianChartWrapper').style.display = 'block';
 		document.getElementById('polarChartWrapper').style.display = 'none';
 		current_view_mode = 'cartesian';
@@ -2829,10 +2835,22 @@ function draw_polar_chart(selected_tests, attenuation_filter = null) {
 			borderwidth: 1,
 			orientation: 'h',
 			x: 0.5,
-			y: 1.15,
+			y: 1.18,
 			xanchor: 'center',
 			yanchor: 'bottom'
 		},
+		title: attenuation_filter !== null ? {
+			text: `Attenuation: ${attenuation_filter} dB`,
+			font: {
+				family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', monospace" : "'Poppins', sans-serif",
+				size: 16,
+				color: '#e0e0e0'
+			},
+			x: 0.5,
+			xanchor: 'center',
+			y: 1.02,
+			yanchor: 'bottom'
+		} : undefined,
 		paper_bgcolor: '#0a0a0a',
 		plot_bgcolor: '#0a0a0a',
 		font: {
@@ -2842,7 +2860,7 @@ function draw_polar_chart(selected_tests, attenuation_filter = null) {
 		margin: {
 			l: 80,
 			r: 80,
-			t: 120,
+			t: 140,
 			b: 80
 		},
 		hovermode: 'closest'
@@ -2863,6 +2881,7 @@ function toggle_view_mode() {
 	const cartesian_wrapper = document.getElementById('cartesianChartWrapper');
 	const polar_wrapper = document.getElementById('polarChartWrapper');
 	const toggle_chart_type_btn = document.querySelector('.chart-button[onclick="toggleChartType()"]');
+	const chart_container = document.querySelector('.chart-container');
 
 	if (current_view_mode === 'cartesian') {
 		current_view_mode = 'polar';
@@ -2870,12 +2889,14 @@ function toggle_view_mode() {
 		cartesian_wrapper.style.display = 'none';
 		polar_wrapper.style.display = 'block';
 		if (toggle_chart_type_btn) toggle_chart_type_btn.style.display = 'none';
+		if (chart_container) chart_container.classList.add('polar-mode');
 		updateChart();
 	} else {
 		current_view_mode = 'cartesian';
 		toggle_btn.textContent = 'Switch to Polar View';
 		cartesian_wrapper.style.display = 'block';
 		polar_wrapper.style.display = 'none';
+		if (chart_container) chart_container.classList.remove('polar-mode');
 		if (toggle_chart_type_btn) toggle_chart_type_btn.style.display = 'inline-block';
 		updateChart();
 	}
@@ -2982,12 +3003,138 @@ function toggleChartType() {
 }
 
 function export_chart() {
-	if (!chart_instance) return;
-
 	const link = document.createElement('a');
-	link.download = 'wifi-rvr-comparison.png';
-	link.href = chart_instance.toBase64Image();
-	link.click();
+
+	if (current_view_mode === 'polar') {
+		const polar_chart_div = document.getElementById('polarChart');
+		if (!polar_chart_div) return;
+
+		Plotly.toImage(polar_chart_div, {
+			format: 'png',
+			width: 1200,
+			height: 1200
+		}).then(url => {
+			link.download = 'wifi-rvr-polar-comparison.png';
+			link.href = url;
+			link.click();
+		});
+	} else {
+		if (!chart_instance) return;
+
+		link.download = 'wifi-rvr-comparison.png';
+		link.href = chart_instance.toBase64Image();
+		link.click();
+	}
+}
+
+async function export_polar_gif() {
+	if (polar_attenuation_values.length === 0) {
+		show_error('No attenuation data available for GIF export');
+		return;
+	}
+
+	if (typeof gifshot === 'undefined') {
+		show_error('GIF library not loaded. Please refresh the page and try again.');
+		return;
+	}
+
+	const loading_msg = document.createElement('div');
+	loading_msg.className = 'loading';
+	loading_msg.textContent = 'Creating animated GIF...';
+	document.body.appendChild(loading_msg);
+
+	try {
+		const polar_chart_div = document.getElementById('polarChart');
+		const checkboxes = document.querySelectorAll('.test-checkbox:checked');
+		const selected_tests = [];
+
+		checkboxes.forEach(cb => {
+			const [file_name, test_name] = cb.value.split('|');
+			const fileData = loaded_files.get(file_name);
+			const test = fileData.rvr_data.find(t => t.name === test_name);
+			if (test) {
+				selected_tests.push({
+					...test,
+					file_name: file_name,
+					device_info: fileData.device_info
+				});
+			}
+		});
+
+		const total_duration_seconds = 10;
+		const gif_width = 1200;
+		const gif_height = 1200;
+		const images = [];
+
+		console.log('Creating GIF with', polar_attenuation_values.length, 'frames');
+
+		for (let i = 0; i < polar_attenuation_values.length; i++) {
+			const attenuation = polar_attenuation_values[i];
+
+			loading_msg.textContent = `Capturing frames... ${i + 1}/${polar_attenuation_values.length}`;
+			console.log('Capturing frame', i + 1, 'at attenuation', attenuation, 'dB');
+
+			draw_polar_chart(selected_tests, attenuation);
+
+			await new Promise(resolve => setTimeout(resolve, 100));
+
+			const image_data_url = await Plotly.toImage(polar_chart_div, {
+				format: 'png',
+				width: gif_width,
+				height: gif_height
+			});
+
+			images.push(image_data_url);
+		}
+
+		console.log('All frames captured, adding end pause...');
+
+		const last_frame = images[images.length - 1];
+		const frame_duration = total_duration_seconds / polar_attenuation_values.length;
+		const pause_frames = Math.ceil(5 / frame_duration);
+
+		for (let i = 0; i < pause_frames; i++) {
+			images.push(last_frame);
+		}
+
+		console.log('Creating GIF...');
+		loading_msg.textContent = 'Creating GIF...';
+
+		gifshot.createGIF({
+			images: images,
+			gifWidth: gif_width,
+			gifHeight: gif_height,
+			interval: frame_duration,
+			frameDuration: 1,
+			sampleInterval: 10,
+			numWorkers: 2,
+			loop: 1
+		}, (obj) => {
+			if (!obj.error) {
+				console.log('GIF created successfully');
+				const link = document.createElement('a');
+				link.download = 'wifi-rvr-polar-animation.gif';
+				link.href = obj.image;
+				document.body.appendChild(link);
+				link.click();
+				document.body.removeChild(link);
+
+				loading_msg.remove();
+				show_success('GIF exported successfully');
+
+				draw_polar_chart(selected_tests, current_polar_attenuation);
+			} else {
+				console.error('GIF creation error:', obj.error);
+				loading_msg.remove();
+				show_error(`Failed to create GIF: ${obj.errorMsg}`);
+			}
+		});
+
+	} catch (error) {
+		console.error('Error creating GIF:', error);
+		loading_msg.remove();
+		show_error(`Failed to create GIF: ${error.message}`);
+	}
 }
 
 function updateComparisonTable(selected_tests) {
