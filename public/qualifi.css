@@ -2025,3 +2025,17 @@ main {
 		display: none;
 	}
 }
+
+footer {
+	text-align: center;
+	padding: var(--space-lg) 0;
+	margin-top: var(--space-xl);
+	border-top: 1px solid var(--border-subtle);
+}
+
+footer .version {
+	font-size: 0.75rem;
+	color: var(--text-tertiary);
+	opacity: 0.6;
+	font-family: var(--primary-font);
+}
