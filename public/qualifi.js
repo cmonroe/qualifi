@@ -3026,19 +3026,7 @@ function export_csv() {
 	if (selected_tests.length === 0) return;
 
 	// Create CSV data
-	let csv = 'Device,Model,Software Version,Test Configuration,Direction,Band,Mode (0dB),';
-
-	// Get all unique attenuation values
-	const allAttenuations = new Set();
-	selected_tests.forEach(test => {
-		test.data.forEach(point => {
-			allAttenuations.add(point.attenuation);
-		});
-	});
-	const attenuations = Array.from(allAttenuations).sort((a, b) => a - b);
-
-	// Add attenuation headers
-	csv += attenuations.map(att => `${att}dB`).join(',') + '\n';
+	let csv = 'Device,Model,Software Version,Test Configuration,Direction,Band,Mode (0dB),Attenuation (dB),Throughput (Mbps)\n';
 
 	// Add data rows
 	selected_tests.forEach(test => {
@@ -3049,12 +3037,12 @@ function export_csv() {
 		const band = test.band || 'UNK';
 		const mode = test.mode || 'Unknown';
 
-		csv += `"${deviceName}","${model}","${version}","${config}","${test.direction}","${band}","${mode}",`;
+		const sorted_data = [...test.data].sort((a, b) => a.attenuation - b.attenuation);
 
-		// Add throughput values for each attenuation
-		const throughputMap = new Map(test.data.map(p => [p.attenuation, p.throughput]));
-		csv += attenuations.map(att => throughputMap.get(att) || '').join(',');
-		csv += '\n';
+		sorted_data.forEach(point => {
+			csv += `"${deviceName}","${model}","${version}","${config}","${test.direction}","${band}","${mode}",`;
+			csv += `${point.attenuation},${point.throughput}\n`;
+		});
 	});
 
 	// Download CSV
