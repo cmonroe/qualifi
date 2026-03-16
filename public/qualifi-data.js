@@ -549,11 +549,11 @@ function extract_rvr_data(workbook) {
 				if (isTxDirection) {
 					configBandwidth = row[bwIndex] || 'Unknown';
 					configNss = row[nssIndex] || 'Unknown';
-					configMode = hasRxMode ? row[rxModeIndex] : row[modeIndex] || 'Unknown';
+					configMode = (hasRxMode ? row[rxModeIndex] : row[modeIndex]) || 'Unknown';
 				} else if (isRxDirection) {
 					configBandwidth = row[bwIndex] || 'Unknown';
 					configNss = row[nssIndex] || 'Unknown';
-					configMode = hasTxMode ? row[txModeIndex] : row[modeIndex] || 'Unknown';
+					configMode = (hasTxMode ? row[txModeIndex] : row[modeIndex]) || 'Unknown';
 
 				} else {
 					configBandwidth = row[bwIndex] || 'Unknown';
@@ -562,15 +562,15 @@ function extract_rvr_data(workbook) {
 				}
 
 				if (isTxDirection) {
-					bandwidth = hasRxBw ? row[rxBwIndex] : row[bwIndex] || 'Unknown';
-					nss = hasRxNss ? row[rxNssIndex] : row[nssIndex] || 'Unknown';
-					mode = hasRxMode ? row[rxModeIndex] : row[modeIndex] || 'Unknown';
-					mcs = hasRxMcs ? row[rxMcsIndex] : 'Unknown';
+					bandwidth = (hasRxBw ? row[rxBwIndex] : row[bwIndex]) || 'Unknown';
+					nss = (hasRxNss ? row[rxNssIndex] : row[nssIndex]) || 'Unknown';
+					mode = (hasRxMode ? row[rxModeIndex] : row[modeIndex]) || 'Unknown';
+					mcs = (hasRxMcs ? row[rxMcsIndex] : null) || 'Unknown';
 				} else if (isRxDirection) {
-					bandwidth = hasTxBw ? row[txBwIndex] : row[bwIndex] || 'Unknown';
-					nss = hasTxNss ? row[txNssIndex] : row[nssIndex] || 'Unknown';
-					mode = hasTxMode ? row[txModeIndex] : row[modeIndex] || 'Unknown';
-					mcs = hasTxMcs ? row[txMcsIndex] : 'Unknown';
+					bandwidth = (hasTxBw ? row[txBwIndex] : row[bwIndex]) || 'Unknown';
+					nss = (hasTxNss ? row[txNssIndex] : row[nssIndex]) || 'Unknown';
+					mode = (hasTxMode ? row[txModeIndex] : row[modeIndex]) || 'Unknown';
+					mcs = (hasTxMcs ? row[txMcsIndex] : null) || 'Unknown';
 				} else {
 					bandwidth = row[bwIndex] || 'Unknown';
 					nss = row[nssIndex] || 'Unknown';
