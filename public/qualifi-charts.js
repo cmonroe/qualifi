@@ -118,6 +118,14 @@ function get_responsive_chart_config() {
 	};
 }
 
+function get_country_code(country_value) {
+	if (!country_value) return '';
+	const text = country_value.toString().trim();
+	if (!text || text.toLowerCase() === 'unknown') return '';
+	const match = text.match(/^country\s*:\s*(.+)$/i);
+	return (match ? match[1] : text).trim();
+}
+
 function handle_resize() {
 	const was_mobile = is_mobile;
 	detect_device_capabilities();
@@ -430,9 +438,10 @@ function draw_polar_chart(selected_tests, attenuation_filter = null) {
 
 		const device_name = test.device_info?.['Model Number'] || test.device_info?.Name || test.file_name || 'Unknown';
 		const software_version = test.device_info?.['Software Version'] || '';
+		const country = get_country_code(test.device_info?.Country);
 		const test_config = formatTestName(test);
 		const direction = test.direction || 'Unknown';
-		let trace_name = `${device_name} ${software_version ? `v${software_version}` : ''} - ${test_config} ${direction}`;
+		let trace_name = `${device_name} ${software_version ? `v${software_version}` : ''}${country ? ` - ${country}` : ''} - ${test_config} ${direction}`;
 
 		const rotation_match = trace_name.match(/\(Rotation: [^)]+\)/);
 		if (rotation_match) {
@@ -901,6 +910,7 @@ function drawChart(selected_tests) {
 	const datasets = tests_to_render.map((test, index) => {
 		const deviceName = test.device_info?.['Model Number'] || test.device_info?.Name || test.file_name;
 		const softwareVersion = test.device_info?.['Software Version'] || '';
+		const country = get_country_code(test.device_info?.Country);
 		const modelNumber = test.device_info?.['Model Number'] || '';
 		const test_config = formatTestName(test);
 		const configKey = `${deviceName}|${softwareVersion}|${test_config}`;
@@ -910,7 +920,7 @@ function drawChart(selected_tests) {
 		const testKey = `${modelKey}|${softwareVersion}|${test_config}|${test.direction}`;
 		const pointStyle = modelStyleMap.get(testKey) || 'circle';
 
-		let label = `${deviceName} ${softwareVersion ? `v${softwareVersion}` : ''} - ${test_config} ${test.direction}`;
+		let label = `${deviceName} ${softwareVersion ? `v${softwareVersion}` : ''}${country ? ` - ${country}` : ''} - ${test_config} ${test.direction}`;
 		if (test.display_angle !== undefined) {
 			label += ` @ ${test.display_angle}°`;
 		}
@@ -964,7 +974,8 @@ function drawChart(selected_tests) {
 			test_config: test_config,
 			fullTest: test,
 			display_angle: test.display_angle,
-			software_version: softwareVersion
+			software_version: softwareVersion,
+			country: country
 		};
 	});
 
@@ -1048,10 +1059,10 @@ function drawChart(selected_tests) {
 								const has_angle = dataset.display_angle !== undefined && dataset.display_angle !== null;
 
 								if (has_angle) {
-									const group_key = `${dataset.deviceName}|${dataset.software_version}|${dataset.test_config}|${dataset.fullTest.direction}`;
+							const group_key = `${dataset.deviceName}|${dataset.software_version}|${dataset.country}|${dataset.test_config}|${dataset.fullTest.direction}`;
 
 									if (!grouped.has(group_key)) {
-										let header_text = `${dataset.deviceName} ${dataset.software_version ? `v${dataset.software_version}` : ''} - ${dataset.test_config} ${dataset.fullTest.direction}`;
+									let header_text = `${dataset.deviceName} ${dataset.software_version ? `v${dataset.software_version}` : ''}${dataset.country ? ` - ${dataset.country}` : ''} - ${dataset.test_config} ${dataset.fullTest.direction}`;
 
 										const rotation_match = header_text.match(/\(Rotation: [^)]+\)/);
 										if (rotation_match) {

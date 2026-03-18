@@ -338,7 +338,11 @@ function update_file_list() {
 	let localCount = 0;
 
 	loaded_files.forEach(data => {
-		uniqueDevices.add(data.device_info?.Name || data.file_name);
+		const name = data.device_info?.Name || data.file_name;
+		const model = data.device_info?.['Model Number'] || 'Unknown Model';
+		const version = data.device_info?.['Software Version'] || 'Unknown';
+		const country = data.device_info?.Country || '';
+		uniqueDevices.add([name, model, version, country].filter(Boolean).join('|'));
 		if (data.from_server) {
 			serverCount++;
 		} else {
@@ -356,12 +360,16 @@ function update_file_list() {
 	loaded_files.forEach((data, file_name) => {
 		const deviceName = data.device_info?.Name || 'Unknown Device';
 		const model = data.device_info?.['Model Number'] || 'Unknown Model';
-		const modelKey = `${deviceName}|${model}`;
+		const version = data.device_info?.['Software Version'] || 'Unknown';
+		const country = data.device_info?.Country || '';
+		const modelKey = [deviceName, model, version, country].filter(Boolean).join('|');
 
 		if (!modelGroups.has(modelKey)) {
 			modelGroups.set(modelKey, {
 				deviceName,
 				model,
+				version,
+				country,
 				files: [],
 				versions: new Set(),
 				totalTests: 0,
@@ -379,9 +387,9 @@ function update_file_list() {
 			group.localFiles++;
 		}
 
-		const version = data.device_info?.['Software Version'];
-		if (version) {
-			group.versions.add(version);
+		const groupVersion = data.device_info?.['Software Version'];
+		if (groupVersion) {
+			group.versions.add(groupVersion);
 		}
 	});
 
@@ -392,10 +400,6 @@ function update_file_list() {
 		item.style.marginBottom = '10px';
 
 		const primaryLabel = group.model !== 'Unknown Model' ? group.model : group.deviceName;
-
-		const versionText = group.versions.size > 0 ?
-			Array.from(group.versions).map(v => `v${v}`).join(', ') :
-			'Unknown version';
 
 		const sourceText = [];
 		if (group.serverFiles > 0) sourceText.push(`${group.serverFiles} server`);
@@ -409,7 +413,7 @@ function update_file_list() {
 							${primaryLabel}
 						</strong>
 						<span style="color: #888; font-size: 0.9em;">
-							${group.deviceName} • ${versionText}
+							${group.deviceName} • v${group.version}${group.country ? ` • ${group.country}` : ''}
 						</span>
 					</div>
 					<div style="color: #aaa; font-size: 0.85em;">
@@ -478,20 +482,26 @@ function clear_server_files() {
 }
 
 function clearDeviceModel(modelKey) {
-	const [deviceName, model] = modelKey.split('|');
+	const parts = modelKey.split('|');
+	const deviceName = parts[0] || 'Unknown Device';
+	const model = parts[1] || 'Unknown Model';
+	const version = parts[2] || 'Unknown';
+	const country = parts[3] || '';
 
 	const filesToRemove = [];
 	loaded_files.forEach((data, file_name) => {
 		const fileDeviceName = data.device_info?.Name || 'Unknown Device';
 		const fileModel = data.device_info?.['Model Number'] || 'Unknown Model';
-		const fileModelKey = `${fileDeviceName}|${fileModel}`;
+		const fileVersion = data.device_info?.['Software Version'] || 'Unknown';
+		const fileCountry = data.device_info?.Country || '';
+		const fileModelKey = [fileDeviceName, fileModel, fileVersion, fileCountry].filter(Boolean).join('|');
 
 		if (fileModelKey === modelKey) {
 			filesToRemove.push(file_name);
 		}
 	});
 
-	if (filesToRemove.length > 0 && confirm(`Remove all files for ${deviceName}?`)) {
+	if (filesToRemove.length > 0 && confirm(`Remove all files for ${deviceName} ${model !== 'Unknown Model' ? `(${model})` : ''}${version ? ` v${version}` : ''}${country ? ` ${country}` : ''}?`)) {
 		filesToRemove.forEach(file_name => {
 			loaded_files.delete(file_name);
 		});
@@ -546,7 +556,8 @@ function update_test_options() {
 		const name = fileData.device_info?.Name || file_name.split('_')[0] || 'Unknown Device';
 		const model = fileData.device_info?.['Model Number'] || '';
 		const version = fileData.device_info?.['Software Version'] || '';
-		const groupKey = [name, model, version].filter(Boolean).join('|');
+		const country = fileData.device_info?.Country || '';
+		const groupKey = [name, model, version, country].filter(Boolean).join('|');
 
 		console.log(`Processing file: ${file_name}, Device name: ${name}, Group key: ${groupKey}`);
 
@@ -604,9 +615,12 @@ function update_test_options() {
 
 		const model = deviceGroup.device_info?.['Model Number'] || '';
 		const versions = new Set();
+		const countries = new Set();
 		deviceGroup.tests.forEach(test => {
 			const version = test.device_info?.['Software Version'];
 			if (version) versions.add(version);
+			const country = test.device_info?.Country;
+			if (country) countries.add(country);
 		});
 
 		const escapeQuotes = (str) => str.replace(/'/g, "\\'").replace(/"/g, '\\"');
@@ -619,7 +633,8 @@ function update_test_options() {
 				<div class="device-group-meta">
 					${deviceGroup.files.length} file(s) |
 					${deviceGroup.tests.length} tests |
-					Version(s): ${Array.from(versions).join(', ')}
+					Version(s): ${Array.from(versions).join(', ')} |
+					Country: ${Array.from(countries).join(', ') || 'Unknown'}
 				</div>
 			</div>
 			<div>
@@ -929,21 +944,23 @@ function updateStats(selected_tests) {
 		return { test, maxRate, avgRate, effective_range };
 	});
 
-		testStats.forEach(({ test, maxRate, avgRate, effective_range }) => {
-			const card = document.createElement('div');
-			card.className = 'stat-card';
-			const modelName = test.device_info?.['Model Number'] || test.device_info?.Name || test.file_name;
+	testStats.forEach(({ test, maxRate, avgRate, effective_range }) => {
+		const card = document.createElement('div');
+		card.className = 'stat-card';
+		const modelName = test.device_info?.['Model Number'] || test.device_info?.Name || test.file_name;
+		const country = test.device_info?.Country || '';
+		const countryText = country ? ` • ${country}` : '';
 
 		const isBestMax = maxRate === bestMaxRate && selected_tests.length > 1;
 		const isBestAvg = avgRate === bestAvgRate && selected_tests.length > 1;
 		const isBestRange = effective_range === bestRange && selected_tests.length > 1;
 
-			card.innerHTML = `
-				<h4 style="color: #00a0c8; margin-bottom: 15px;">
-					${modelName}<br>
-					<span style="font-size: 0.75em; color: #888;">
-						v${test.device_info?.['Software Version'] || 'Unknown'}
-					</span><br>
+		card.innerHTML = `
+			<h4 style="color: #00a0c8; margin-bottom: 15px;">
+				${modelName}<br>
+				<span style="font-size: 0.75em; color: #888;">
+					v${test.device_info?.['Software Version'] || 'Unknown'}${countryText}
+				</span><br>
 				<span style="font-size: 0.8em; color: #aaa;">
 					${formatTestName(test)} ${test.direction}
 				</span>
@@ -984,6 +1001,7 @@ function updateComparisonTable(selected_tests) {
 	html += '<th>Test Configuration</th>';
 	html += '<th>Device</th>';
 	html += '<th>Software Version</th>';
+	html += '<th>Country</th>';
 	html += '<th>Band</th>';
 	html += '<th>Mode (0dB)</th>';
 	html += '<th>Max Throughput</th>';
@@ -1006,9 +1024,10 @@ function updateComparisonTable(selected_tests) {
 		});
 		const bestRange = Math.max(...ranges);
 
-			tests.forEach((test, index) => {
-				const deviceName = test.device_info?.['Model Number'] || test.device_info?.Name || test.file_name;
-				const softwareVersion = test.device_info?.['Software Version'] || 'Unknown';
+		tests.forEach((test, index) => {
+			const deviceName = test.device_info?.['Model Number'] || test.device_info?.Name || test.file_name;
+			const softwareVersion = test.device_info?.['Software Version'] || 'Unknown';
+			const country = test.device_info?.Country || '';
 			const throughputs = test.data.map(d => d.throughput).filter(t => t > 0);
 			const maxRate = Math.max(...throughputs);
 			const avgRate = Math.round(throughputs.reduce((a, b) => a + b, 0) / throughputs.length);
@@ -1023,6 +1042,7 @@ function updateComparisonTable(selected_tests) {
 			}
 			html += `<td data-label="Device">${deviceName}</td>`;
 			html += `<td data-label="Software Version">${softwareVersion}</td>`;
+			html += `<td data-label="Country">${country}</td>`;
 			html += `<td data-label="Band" style="color: ${bandColor}; font-weight: 700;">${band}</td>`;
 			html += `<td data-label="Mode (0dB)">${test.mode || 'Unknown'}</td>`;
 			html += `<td data-label="Max Throughput" class="${maxRate === bestMaxThroughput ? 'best-value' : ''}">${maxRate} Mbps</td>`;
@@ -1046,6 +1066,10 @@ function updateComparisonTable(selected_tests) {
 						<div class="mobile-card-label">Software Version</div>
 						<div class="mobile-card-value">${softwareVersion}</div>
 					</div>
+					<div class="mobile-card-item full-width">
+						<div class="mobile-card-label">Country</div>
+						<div class="mobile-card-value">${country}</div>
+					</div>
 					<div class="mobile-card-item">
 						<div class="mobile-card-label">Mode (0dB)</div>
 						<div class="mobile-card-value">${test.mode || 'Unknown'}</div>
@@ -1066,7 +1090,7 @@ function updateComparisonTable(selected_tests) {
 			</div>`;
 		});
 
-		html += '<tr style="height: 10px;"><td colspan="8" style="border: none;"></td></tr>';
+		html += '<tr style="height: 10px;"><td colspan="9" style="border: none;"></td></tr>';
 	});
 
 	html += '</tbody></table>';
