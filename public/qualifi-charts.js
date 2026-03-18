@@ -428,7 +428,7 @@ function draw_polar_chart(selected_tests, attenuation_filter = null) {
 			throughputs.push(throughputs[0]);
 		}
 
-		const device_name = test.device_info?.Name || test.file_name || 'Unknown';
+		const device_name = test.device_info?.['Model Number'] || test.device_info?.Name || test.file_name || 'Unknown';
 		const software_version = test.device_info?.['Software Version'] || '';
 		const test_config = formatTestName(test);
 		const direction = test.direction || 'Unknown';
@@ -814,7 +814,7 @@ function drawChart(selected_tests) {
 	// First pass: identify unique device + test configuration + software version combinations
 	const uniqueConfigs = new Set();
 	tests_to_render.forEach(test => {
-		const deviceName = test.device_info?.Name || test.file_name;
+		const deviceName = test.device_info?.['Model Number'] || test.device_info?.Name || test.file_name;
 		const softwareVersion = test.device_info?.['Software Version'] || '';
 		const test_config = formatTestName(test);
 		const configKey = `${deviceName}|${softwareVersion}|${test_config}`;
@@ -835,7 +835,7 @@ function drawChart(selected_tests) {
 	// Group tests by DUT model to assign point styles
 	const modelGroups = new Map();
 	tests_to_render.forEach(test => {
-		const deviceName = test.device_info?.Name || test.file_name;
+		const deviceName = test.device_info?.['Model Number'] || test.device_info?.Name || test.file_name;
 		const modelNumber = test.device_info?.['Model Number'] || '';
 		const modelKey = `${deviceName}|${modelNumber}`;
 
@@ -899,7 +899,7 @@ function drawChart(selected_tests) {
 	const angle_index_map = new Map();
 
 	const datasets = tests_to_render.map((test, index) => {
-		const deviceName = test.device_info?.Name || test.file_name;
+		const deviceName = test.device_info?.['Model Number'] || test.device_info?.Name || test.file_name;
 		const softwareVersion = test.device_info?.['Software Version'] || '';
 		const modelNumber = test.device_info?.['Model Number'] || '';
 		const test_config = formatTestName(test);

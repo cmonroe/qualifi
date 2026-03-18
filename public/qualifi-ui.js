@@ -929,20 +929,21 @@ function updateStats(selected_tests) {
 		return { test, maxRate, avgRate, effective_range };
 	});
 
-	testStats.forEach(({ test, maxRate, avgRate, effective_range }) => {
-		const card = document.createElement('div');
-		card.className = 'stat-card';
+		testStats.forEach(({ test, maxRate, avgRate, effective_range }) => {
+			const card = document.createElement('div');
+			card.className = 'stat-card';
+			const modelName = test.device_info?.['Model Number'] || test.device_info?.Name || test.file_name;
 
 		const isBestMax = maxRate === bestMaxRate && selected_tests.length > 1;
 		const isBestAvg = avgRate === bestAvgRate && selected_tests.length > 1;
 		const isBestRange = effective_range === bestRange && selected_tests.length > 1;
 
-		card.innerHTML = `
-			<h4 style="color: #00a0c8; margin-bottom: 15px;">
-				${test.device_info?.Name || test.file_name}<br>
-				<span style="font-size: 0.75em; color: #888;">
-					v${test.device_info?.['Software Version'] || 'Unknown'}
-				</span><br>
+			card.innerHTML = `
+				<h4 style="color: #00a0c8; margin-bottom: 15px;">
+					${modelName}<br>
+					<span style="font-size: 0.75em; color: #888;">
+						v${test.device_info?.['Software Version'] || 'Unknown'}
+					</span><br>
 				<span style="font-size: 0.8em; color: #aaa;">
 					${formatTestName(test)} ${test.direction}
 				</span>
@@ -1005,9 +1006,9 @@ function updateComparisonTable(selected_tests) {
 		});
 		const bestRange = Math.max(...ranges);
 
-		tests.forEach((test, index) => {
-			const deviceName = test.device_info?.Name || test.file_name;
-			const softwareVersion = test.device_info?.['Software Version'] || 'Unknown';
+			tests.forEach((test, index) => {
+				const deviceName = test.device_info?.['Model Number'] || test.device_info?.Name || test.file_name;
+				const softwareVersion = test.device_info?.['Software Version'] || 'Unknown';
 			const throughputs = test.data.map(d => d.throughput).filter(t => t > 0);
 			const maxRate = Math.max(...throughputs);
 			const avgRate = Math.round(throughputs.reduce((a, b) => a + b, 0) / throughputs.length);
