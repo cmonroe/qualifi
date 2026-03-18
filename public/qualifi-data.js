@@ -346,6 +346,16 @@ function extract_device_info(workbook) {
 				info[row[0]] = row[1];
 			}
 		});
+
+		for (const value of Object.values(info)) {
+			if (value === null || value === undefined) continue;
+			const text = value.toString().trim();
+			const match = text.match(/country\s*:\s*(.+)/i);
+			if (match && match[1]) {
+				info.Country = match[1].trim();
+				break;
+			}
+		}
 	}
 
 	return info;
