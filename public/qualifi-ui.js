@@ -541,23 +541,27 @@ function update_test_options() {
 	const deviceGroups = new Map();
 
 	loaded_files.forEach((fileData, file_name) => {
-		const deviceName = fileData.device_info?.Name || file_name.split('_')[0] || 'Unknown Device';
+		const name = fileData.device_info?.Name || file_name.split('_')[0] || 'Unknown Device';
+		const model = fileData.device_info?.['Model Number'] || '';
+		const version = fileData.device_info?.['Software Version'] || '';
+		const groupKey = [name, model, version].filter(Boolean).join('|');
 
-		console.log(`Processing file: ${file_name}, Device name: ${deviceName}`);
+		console.log(`Processing file: ${file_name}, Device name: ${name}, Group key: ${groupKey}`);
 
-		if (!deviceGroups.has(deviceName)) {
-			deviceGroups.set(deviceName, {
+		if (!deviceGroups.has(groupKey)) {
+			deviceGroups.set(groupKey, {
 				files: [],
 				tests: [],
-				device_info: fileData.device_info
+				device_info: fileData.device_info,
+				displayName: name
 			});
 		}
 
-		const deviceGroup = deviceGroups.get(deviceName);
+		const deviceGroup = deviceGroups.get(groupKey);
 		deviceGroup.files.push(file_name);
 
 		fileData.rvr_data.forEach(test => {
-			console.log(`Adding test: ${test.name} from ${file_name} to device ${deviceName}`);
+			console.log(`Adding test: ${test.name} from ${file_name} to device ${name}`);
 			deviceGroup.tests.push({
 				...test,
 				file_name: file_name,
@@ -589,7 +593,7 @@ function update_test_options() {
 
 	let testIndex = 0;
 
-	deviceGroups.forEach((deviceGroup, deviceName) => {
+	deviceGroups.forEach((deviceGroup, groupKey) => {
 		const deviceContainer = document.createElement('div');
 		deviceContainer.className = 'device-test-group';
 
@@ -608,7 +612,7 @@ function update_test_options() {
 		deviceHeader.innerHTML = `
 			<div class="device-group-info">
 				<div class="device-group-title">
-					${deviceName} ${model ? `(${model})` : ''}
+					${deviceGroup.displayName} ${model ? `(${model})` : ''}
 				</div>
 				<div class="device-group-meta">
 					${deviceGroup.files.length} file(s) |
@@ -617,8 +621,8 @@ function update_test_options() {
 				</div>
 			</div>
 			<div>
-				<button class="btn-small" onclick="selectAllDevice('${escapeQuotes(deviceName)}')">Select All</button>
-				<button class="btn-small" onclick="selectNoneDevice('${escapeQuotes(deviceName)}')">Clear</button>
+				<button class="btn-small" onclick="selectAllDevice('${escapeQuotes(groupKey)}')">Select All</button>
+				<button class="btn-small" onclick="selectNoneDevice('${escapeQuotes(groupKey)}')">Clear</button>
 			</div>
 		`;
 		deviceContainer.appendChild(deviceHeader);
@@ -637,7 +641,7 @@ function update_test_options() {
 		txColumn.appendChild(txHeader);
 
 		if (txTests.length > 0) {
-			const txTable = createTestTable(txTests, deviceName, testIndex);
+			const txTable = createTestTable(txTests, groupKey, testIndex);
 			txColumn.appendChild(txTable.table);
 			testIndex = txTable.nextIndex;
 		} else {
@@ -655,7 +659,7 @@ function update_test_options() {
 		rxColumn.appendChild(rxHeader);
 
 		if (rxTests.length > 0) {
-			const rxTable = createTestTable(rxTests, deviceName, testIndex);
+			const rxTable = createTestTable(rxTests, groupKey, testIndex);
 			rxColumn.appendChild(rxTable.table);
 			testIndex = rxTable.nextIndex;
 		} else {
