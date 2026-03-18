@@ -391,6 +391,8 @@ function update_file_list() {
 		item.style.padding = '15px';
 		item.style.marginBottom = '10px';
 
+		const primaryLabel = group.model !== 'Unknown Model' ? group.model : group.deviceName;
+
 		const versionText = group.versions.size > 0 ?
 			Array.from(group.versions).map(v => `v${v}`).join(', ') :
 			'Unknown version';
@@ -404,10 +406,10 @@ function update_file_list() {
 				<div style="flex: 1;">
 					<div style="display: flex; align-items: center; margin-bottom: 8px;">
 						<strong style="color: #00a0c8; font-size: 1.1em; margin-right: 15px;">
-							${group.deviceName}
+							${primaryLabel}
 						</strong>
 						<span style="color: #888; font-size: 0.9em;">
-							${group.model} • ${versionText}
+							${group.deviceName} • ${versionText}
 						</span>
 					</div>
 					<div style="color: #aaa; font-size: 0.85em;">
@@ -612,7 +614,7 @@ function update_test_options() {
 		deviceHeader.innerHTML = `
 			<div class="device-group-info">
 				<div class="device-group-title">
-					${deviceGroup.displayName} ${model ? `(${model})` : ''}
+					${model || deviceGroup.displayName} ${model ? `(${deviceGroup.displayName})` : ''}
 				</div>
 				<div class="device-group-meta">
 					${deviceGroup.files.length} file(s) |
