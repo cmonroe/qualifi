@@ -197,7 +197,7 @@ async function export_polar_gif() {
 		const selected_tests = [];
 
 		checkboxes.forEach(cb => {
-			const [file_name, test_name] = cb.value.split('|');
+			const [file_name, test_name] = cb.value.split(':::');
 			const fileData = loaded_files.get(file_name);
 			const test = fileData.rvr_data.find(t => t.name === test_name);
 			if (test) {
@@ -290,7 +290,7 @@ function export_csv() {
 	const checkboxes = document.querySelectorAll('.test-checkbox:checked');
 
 	checkboxes.forEach(cb => {
-		const [file_name, test_name] = cb.value.split('|');
+		const [file_name, test_name] = cb.value.split(':::');
 		const fileData = loaded_files.get(file_name);
 		const test = fileData.rvr_data.find(t => t.name === test_name);
 
@@ -371,7 +371,7 @@ function update_polar_attenuation() {
 		const selected_tests = [];
 		const checkboxes = document.querySelectorAll('.test-checkbox:checked');
 		checkboxes.forEach(cb => {
-			const [file_name, test_name] = cb.value.split('|');
+			const [file_name, test_name] = cb.value.split(':::');
 			const fileData = loaded_files.get(file_name);
 			const test = fileData.rvr_data.find(t => t.name === test_name);
 			if (test) {
@@ -571,7 +571,7 @@ function updateChart() {
 	const checkboxes = document.querySelectorAll('.test-checkbox:checked');
 
 	checkboxes.forEach(cb => {
-		const [file_name, test_name] = cb.value.split('|');
+		const [file_name, test_name] = cb.value.split(':::');
 		const fileData = loaded_files.get(file_name);
 		const test = fileData.rvr_data.find(t => t.name === test_name);
 
