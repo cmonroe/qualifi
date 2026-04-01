@@ -727,7 +727,7 @@ function createTestTable(tests, deviceName, startIndex) {
 		checkbox.type = 'checkbox';
 		checkbox.className = 'test-checkbox';
 		checkbox.id = `test-${testIndex}`;
-		checkbox.value = `${test.file_name}|${test.name}`;
+		checkbox.value = `${test.file_name}:::${test.name}`;
 		checkbox.setAttribute('data-devicename', deviceName);
 		checkbox.addEventListener('change', updateChart);
 		checkboxCell.appendChild(checkbox);
@@ -882,7 +882,7 @@ window.select_matching_tests = function() {
 
 	const configMap = new Map();
 	checkboxes.forEach(cb => {
-		const [file_name, test_name] = cb.value.split('|');
+		const [file_name, test_name] = cb.value.split(':::');
 		const deviceName = cb.getAttribute('data-devicename');
 
 		const configMatch = test_name.match(/(DUT-[TR]X)_CH(\d+)_(\d+MHz)_(\d+SS)_(\w+)/);
