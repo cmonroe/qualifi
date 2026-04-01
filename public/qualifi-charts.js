@@ -741,8 +741,13 @@ function updateChart() {
 
 	updateStats(selected_tests);
 
-	// Show comparison panel if comparing multiple devices
-	const uniqueDevices = new Set(selected_tests.map(t => t.device_info?.Name || t.file_name));
+	// Show comparison panel if comparing multiple devices/versions
+	const uniqueDevices = new Set(selected_tests.map(t => {
+		const name = t.device_info?.Name || '';
+		const model = t.device_info?.['Model Number'] || '';
+		const version = t.device_info?.['Software Version'] || '';
+		return [name, model, version].filter(Boolean).join('|') || t.file_name;
+	}));
 	if (uniqueDevices.size > 1) {
 		document.querySelector('#comparisonPanel').style.display = 'block';
 		updateComparisonTable(selected_tests);
