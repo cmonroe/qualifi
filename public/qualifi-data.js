@@ -302,10 +302,16 @@ async function load_excel_file(file, from_server = false, server_path = null, su
 			});
 		}
 
-		loaded_files.set(file.name, {
+		// Create a unique key using device info to handle same-named files from different directories
+		const name = device_info?.Name || '';
+		const model = device_info?.['Model Number'] || '';
+		const version = device_info?.['Software Version'] || '';
+		const file_key = [file.name, name, model, version].filter(Boolean).join('|');
+
+		loaded_files.set(file_key, {
 			device_info: device_info,
 			rvr_data: rvr_data,
-			file_name: file.name,
+			file_name: file_key,
 			from_server: from_server,
 			server_path: server_path
 		});
@@ -315,7 +321,7 @@ async function load_excel_file(file, from_server = false, server_path = null, su
 			update_test_options();
 
 			const total_data_points = rvr_data.reduce((sum, test) => sum + test.data.length, 0);
-			console.log(`Successfully loaded ${file.name}: ${rvr_data.length} test configurations, ${total_data_points} data points`);
+			console.log(`Successfully loaded ${file_key}: ${rvr_data.length} test configurations, ${total_data_points} data points`);
 
 			if (!suppress_notification) {
 				show_success(`Loaded ${file.name} - ${rvr_data.length} test configurations`);

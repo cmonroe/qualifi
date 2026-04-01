@@ -197,7 +197,7 @@ async function export_polar_gif() {
 		const selected_tests = [];
 
 		checkboxes.forEach(cb => {
-			const [file_name, test_name] = cb.value.split('|');
+			const [file_name, test_name] = cb.value.split(':::');
 			const fileData = loaded_files.get(file_name);
 			const test = fileData.rvr_data.find(t => t.name === test_name);
 			if (test) {
@@ -290,7 +290,7 @@ function export_csv() {
 	const checkboxes = document.querySelectorAll('.test-checkbox:checked');
 
 	checkboxes.forEach(cb => {
-		const [file_name, test_name] = cb.value.split('|');
+		const [file_name, test_name] = cb.value.split(':::');
 		const fileData = loaded_files.get(file_name);
 		const test = fileData.rvr_data.find(t => t.name === test_name);
 
@@ -371,7 +371,7 @@ function update_polar_attenuation() {
 		const selected_tests = [];
 		const checkboxes = document.querySelectorAll('.test-checkbox:checked');
 		checkboxes.forEach(cb => {
-			const [file_name, test_name] = cb.value.split('|');
+			const [file_name, test_name] = cb.value.split(':::');
 			const fileData = loaded_files.get(file_name);
 			const test = fileData.rvr_data.find(t => t.name === test_name);
 			if (test) {
@@ -571,7 +571,7 @@ function updateChart() {
 	const checkboxes = document.querySelectorAll('.test-checkbox:checked');
 
 	checkboxes.forEach(cb => {
-		const [file_name, test_name] = cb.value.split('|');
+		const [file_name, test_name] = cb.value.split(':::');
 		const fileData = loaded_files.get(file_name);
 		const test = fileData.rvr_data.find(t => t.name === test_name);
 
@@ -741,8 +741,13 @@ function updateChart() {
 
 	updateStats(selected_tests);
 
-	// Show comparison panel if comparing multiple devices
-	const uniqueDevices = new Set(selected_tests.map(t => t.device_info?.Name || t.file_name));
+	// Show comparison panel if comparing multiple devices/versions
+	const uniqueDevices = new Set(selected_tests.map(t => {
+		const name = t.device_info?.Name || '';
+		const model = t.device_info?.['Model Number'] || '';
+		const version = t.device_info?.['Software Version'] || '';
+		return [name, model, version].filter(Boolean).join('|') || t.file_name;
+	}));
 	if (uniqueDevices.size > 1) {
 		document.querySelector('#comparisonPanel').style.display = 'block';
 		updateComparisonTable(selected_tests);
@@ -820,13 +825,14 @@ function drawChart(selected_tests) {
 	const configColorMap = new Map();
 	let colorIndex = 0;
 
-	// First pass: identify unique device + test configuration + software version combinations
+	// First pass: identify unique device + test configuration + software version + country combinations
 	const uniqueConfigs = new Set();
 	tests_to_render.forEach(test => {
 		const deviceName = test.device_info?.['Model Number'] || test.device_info?.Name || test.file_name;
 		const softwareVersion = test.device_info?.['Software Version'] || '';
+		const country = get_country_code(test.device_info?.Country);
 		const test_config = formatTestName(test);
-		const configKey = `${deviceName}|${softwareVersion}|${test_config}`;
+		const configKey = `${deviceName}|${softwareVersion}|${country}|${test_config}`;
 		uniqueConfigs.add(configKey);
 	});
 
@@ -862,8 +868,9 @@ function drawChart(selected_tests) {
 			const configGroups = new Map();
 			tests.forEach(test => {
 				const softwareVersion = test.device_info?.['Software Version'] || '';
+				const country = get_country_code(test.device_info?.Country);
 				const test_config = formatTestName(test);
-				const configKey = `${softwareVersion}|${test_config}`;
+				const configKey = `${softwareVersion}|${country}|${test_config}`;
 
 				if (!configGroups.has(configKey)) {
 					configGroups.set(configKey, []);
@@ -879,7 +886,8 @@ function drawChart(selected_tests) {
 				// Apply the same point style to all tests in this configuration (TX and RX)
 				configTests.forEach(test => {
 					const softwareVersion = test.device_info?.['Software Version'] || '';
-					const testKey = `${modelKey}|${softwareVersion}|${formatTestName(test)}|${test.direction}`;
+					const country = get_country_code(test.device_info?.Country);
+					const testKey = `${modelKey}|${softwareVersion}|${country}|${formatTestName(test)}|${test.direction}`;
 					modelStyleMap.set(testKey, pointStyle);
 				});
 
@@ -889,7 +897,8 @@ function drawChart(selected_tests) {
 			// Single test for this model gets default circle style
 			const test = tests[0];
 			const softwareVersion = test.device_info?.['Software Version'] || '';
-			const testKey = `${modelKey}|${softwareVersion}|${formatTestName(test)}|${test.direction}`;
+			const country = get_country_code(test.device_info?.Country);
+			const testKey = `${modelKey}|${softwareVersion}|${country}|${formatTestName(test)}|${test.direction}`;
 			modelStyleMap.set(testKey, 'circle');
 		}
 	});
@@ -913,11 +922,11 @@ function drawChart(selected_tests) {
 		const country = get_country_code(test.device_info?.Country);
 		const modelNumber = test.device_info?.['Model Number'] || '';
 		const test_config = formatTestName(test);
-		const configKey = `${deviceName}|${softwareVersion}|${test_config}`;
+		const configKey = `${deviceName}|${softwareVersion}|${country}|${test_config}`;
 		let baseColor = configColorMap.get(configKey);
 
 		const modelKey = `${deviceName}|${modelNumber}`;
-		const testKey = `${modelKey}|${softwareVersion}|${test_config}|${test.direction}`;
+		const testKey = `${modelKey}|${softwareVersion}|${country}|${test_config}|${test.direction}`;
 		const pointStyle = modelStyleMap.get(testKey) || 'circle';
 
 		let label = `${deviceName} ${softwareVersion ? `v${softwareVersion}` : ''}${country ? ` - ${country}` : ''} - ${test_config} ${test.direction}`;
