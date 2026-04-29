@@ -12,21 +12,73 @@ function create_image_element(src, className, alt = '') {
 	return img;
 }
 
+let _switch_tab_previous_state = null;
+let _rf_reach_rerender_timer = null;
+
+function rf_reach_rerender_if_visible() {
+	const panel = document.getElementById('crossReportPanel');
+	if (!panel || panel.style.display !== 'block') return;
+	if (typeof rf_reach_render !== 'function') return;
+	if (_rf_reach_rerender_timer) clearTimeout(_rf_reach_rerender_timer);
+	_rf_reach_rerender_timer = setTimeout(() => {
+		_rf_reach_rerender_timer = null;
+		rf_reach_render();
+	}, 200);
+}
+
 function switch_tab(tab) {
 	const serverTab = document.getElementById('serverTab');
 	const localTab = document.getElementById('localTab');
+	const crossReportPanel = document.getElementById('crossReportPanel');
+	const fileList = document.getElementById('fileList');
+	const testSelector = document.querySelector('.test-selector');
+	const chartContainer = document.querySelector('.chart-container');
+	const statsPanel = document.querySelector('.stats-panel');
+	const comparisonPanel = document.getElementById('comparisonPanel');
 	const tabButtons = document.querySelectorAll('.tab-button');
 
 	tabButtons.forEach(btn => btn.classList.remove('active'));
+	const active_btn = document.querySelector(`.tab-button[data-tab="${tab}"]`);
+	if (active_btn) active_btn.classList.add('active');
+
+	if (tab === 'cross-report') {
+		if (!_switch_tab_previous_state) {
+			_switch_tab_previous_state = {
+				fileList: fileList ? fileList.style.display : '',
+				testSelector: testSelector ? testSelector.style.display : '',
+				chartContainer: chartContainer ? chartContainer.style.display : '',
+				statsPanel: statsPanel ? statsPanel.style.display : '',
+				comparisonPanel: comparisonPanel ? comparisonPanel.style.display : ''
+			};
+		}
+		serverTab.style.display = 'none';
+		localTab.style.display = 'none';
+		if (fileList) fileList.style.display = 'none';
+		if (testSelector) testSelector.style.display = 'none';
+		if (chartContainer) chartContainer.style.display = 'none';
+		if (statsPanel) statsPanel.style.display = 'none';
+		if (comparisonPanel) comparisonPanel.style.display = 'none';
+		if (crossReportPanel) crossReportPanel.style.display = 'block';
+		if (typeof rf_reach_render === 'function') rf_reach_render();
+		return;
+	}
+
+	if (_switch_tab_previous_state) {
+		if (fileList) fileList.style.display = _switch_tab_previous_state.fileList;
+		if (testSelector) testSelector.style.display = _switch_tab_previous_state.testSelector;
+		if (chartContainer) chartContainer.style.display = _switch_tab_previous_state.chartContainer;
+		if (statsPanel) statsPanel.style.display = _switch_tab_previous_state.statsPanel;
+		if (comparisonPanel) comparisonPanel.style.display = _switch_tab_previous_state.comparisonPanel;
+		_switch_tab_previous_state = null;
+	}
+	if (crossReportPanel) crossReportPanel.style.display = 'none';
 
 	if (tab === 'server') {
 		serverTab.style.display = 'block';
 		localTab.style.display = 'none';
-		tabButtons[0].classList.add('active');
 	} else {
 		serverTab.style.display = 'none';
 		localTab.style.display = 'block';
-		tabButtons[1].classList.add('active');
 	}
 }
 
@@ -228,6 +280,7 @@ async function toggle_report_selection(report_id) {
 	}
 
 	update_selected_reports_list();
+	rf_reach_rerender_if_visible();
 }
 
 function update_selected_reports_list() {
@@ -273,6 +326,7 @@ function remove_selected_report(report_id) {
 	}
 
 	update_selected_reports_list();
+	rf_reach_rerender_if_visible();
 }
 
 function expand_all_vendors() {

@@ -108,11 +108,14 @@
 		<div class="container">
 			<div class="control-panel">
 				<div class="source-tabs">
-					<button class="tab-button active" onclick="switch_tab('server')">
+					<button class="tab-button active" data-tab="server" onclick="switch_tab('server')">
 						<span class="tab-icon">⬇</span> Server Reports
 					</button>
-					<button class="tab-button" onclick="switch_tab('local')">
+					<button class="tab-button" data-tab="local" onclick="switch_tab('local')">
 						<span class="tab-icon">📁</span> Local Files
+					</button>
+					<button class="tab-button" data-tab="cross-report" onclick="switch_tab('cross-report')">
+						<span class="tab-icon">▦</span> RF Reach
 					</button>
 				</div>
 
@@ -229,6 +232,67 @@
 				<h3>Device Comparison Summary</h3>
 				<div id="comparisonTable"></div>
 			</div>
+
+			<div class="cross-report-panel" id="crossReportPanel" style="display: none;">
+				<div class="cross-report-header">
+					<h3>RF Reach</h3>
+					<div class="cross-report-header-right">
+						<div class="rf-band-filter" aria-label="Band filters">
+							<span class="rf-band-filter-label">Bands</span>
+							<div class="rf-band-filter-options" id="rfReachBandFilters"></div>
+						</div>
+						<span class="cross-report-status" id="crossReportStatus"></span>
+						<button class="btn-small" onclick="rf_reach_render()" title="Re-fetch and re-render all charts">&#x21bb; Refresh</button>
+					</div>
+				</div>
+				<div class="cross-report-beta-banner">
+					<strong>Beta</strong> &mdash; This feature is under active development. Charts and metrics may contain errors. Think for yourself, question authority.
+				</div>
+				<div class="cross-report-charts">
+					<div class="cross-report-chart-block">
+						<div class="cross-report-chart-head">
+							<h4>RSSI heatmap (products &times; attenuation)<span class="rf-info" tabindex="0" data-tooltip="Mean RSSI per (model, attenuation step) cell, sourced from text-csv-0.csv RSSI column.&#10;&#10;Direction is filtered to DUT-TX so the value reflects the DUT's downlink transmit, which is what an end-device antenna sees. DUT-RX rows are LANforge's own ACK-receive level and are not directly comparable across vendors.&#10;&#10;Only pure RvR rows are aggregated (rotation = NA). Rotation sweeps (e.g. 360deg_tx) are excluded so the heatmap reflects the boresight RvR sweep, not antenna-pattern off-axis samples.&#10;&#10;Y-axis rows are sorted by mean RSSI; stronger products land at the top. Facets split per U-NII subdivision and channel BW.">i</span></h4>
+							<p class="cross-report-subtitle">Mean RSSI per model x attenuation step (DUT-TX direction). Rows sorted by mean RSSI.</p>
+						</div>
+						<div id="rssiHeatmapDiv" class="cross-report-chart"></div>
+					</div>
+					<div class="cross-report-chart-block">
+						<div class="cross-report-chart-head">
+							<h4>Simulated iPhone bars vs attenuation<span class="rf-info" tabindex="0" data-tooltip="The iPhone Wi-Fi status icon has three arcs, so bar count ranges 0 to 3.&#10;&#10;Thresholds:&#10;  3 bars: RSSI &ge; -65 dBm&#10;  2 bars: RSSI &ge; -75 dBm (Apple's ~-70 dBm roaming hint sits in this band)&#10;  1 bar:  RSSI &ge; -85 dBm&#10;  0 bars: below -85 dBm&#10;&#10;Mean RSSI is computed first, then mapped to bars. Averaging integer bars across reps would produce fractional values that an iPhone never displays; mapping the averaged RSSI yields a clean 0..3 visualization.">i</span></h4>
+							<p class="cross-report-subtitle">Same RSSI mapped to a 3-arc iPhone Wi-Fi indicator. RSSI is averaged first, then bucketed.</p>
+						</div>
+						<div id="iphoneBarsDiv" class="cross-report-chart"></div>
+					</div>
+					<div class="cross-report-chart-block">
+						<div class="cross-report-chart-head">
+							<h4>EIRP-proxy deviation from cohort median<span class="rf-info" tabindex="0" data-tooltip="EIRP proxy = RSSI + attenuation. With a clean chamber link the slope of RSSI vs Atten is approximately -1 dB/dB, so the chamber path-loss term cancels and only the per-product effective EIRP (minus a chamber constant) remains. That constant is identical across products, so cross-product comparisons are valid.&#10;&#10;Aggregation: per (vendor, model, U-NII band, BW), take the median EIRP-proxy across attenuation steps in [5, 50] dB. The window excludes AGC saturation at low attenuation and the noise floor at high attenuation. Cohort median = median across all loaded products in the same (band, BW) facet. Bar height = product median minus cohort median.&#10;&#10;Only pure RvR rows (rotation = NA) are aggregated. Rotation sweeps (e.g. 360deg_tx) include off-axis antenna-null samples that depress the median for reasons unrelated to transmit capability, and are excluded here. The chart below uses those rotation samples on purpose.&#10;&#10;DFS bands (U-NII-2A, U-NII-2C) are excluded: regulatory caps and DFS-detect TPC reductions depress measured EIRP for reasons unrelated to product transmit capability. Only U-NII-1 and U-NII-3 are used for the 5 GHz EIRP-proxy comparison.&#10;&#10;Cohort = currently loaded server reports; no models are filtered out.">i</span></h4>
+							<p class="cross-report-subtitle">Boresight: median EIRP-proxy per product, minus the cohort median for that band/BW. Positive = stronger than cohort. Rotation sweeps and DFS bands excluded.</p>
+						</div>
+						<div id="eirpDeviationDiv" class="cross-report-chart"></div>
+					</div>
+					<div class="cross-report-chart-block">
+						<div class="cross-report-chart-head">
+							<h4>EIRP-proxy deviation, azimuth-averaged<span class="rf-info" tabindex="0" data-tooltip="Same definition as the boresight EIRP-proxy chart, but the underlying RSSI is averaged across all rotation angles before the median is taken.&#10;&#10;Pipeline: from the 360deg_tx rotation sweeps (atten varies, rotation varies), pool RSSI across rotations at each (product, atten) cell to get one mean RSSI per cell. EIRP-proxy = mean_RSSI + atten. Median across atten steps in [5, 50] dB, then deviation from the cohort median for that (band, BW) facet.&#10;&#10;Captures the EIRP an arbitrarily-oriented client sees on average, rather than the peak directional EIRP. The delta between this chart and the boresight chart above is itself the antenna-uniformity diagnostic: products with a wide gap have directional patterns; products with a narrow gap have uniform patterns.&#10;&#10;Products that did not run a 360deg_tx sweep do not appear here. DFS bands (U-NII-2A, U-NII-2C) are excluded for the same reason as the boresight chart.">i</span></h4>
+							<p class="cross-report-subtitle">Mean RSSI across all rotation angles per atten step, then the same median EIRP-proxy aggregation. Captures average-orientation reach. Sources from 360deg_tx; products without that test do not appear. DFS bands excluded.</p>
+						</div>
+						<div id="eirpDeviationAzimuthDiv" class="cross-report-chart"></div>
+					</div>
+					<div class="cross-report-chart-block">
+						<div class="cross-report-chart-head">
+							<h4>iPhone bars by rotation (band matrix)<span class="rf-info" tabindex="0" data-tooltip="One heatmap per band/BW facet. X axis is attenuation; Y axis is product plus rotation angle; color is simulated iPhone bar count from 0 to 3. Product header rows separate rotation groups while preserving the shared bar colors.&#10;&#10;Bar count is derived from mean RSSI at that (product, rotation, atten) cell, using the same thresholds as the cohort iPhone-bars chart (>= -65 -> 3, >= -75 -> 2, >= -85 -> 1, else 0).&#10;&#10;Products are sorted by average retention of at least 2 bars, then at least 1 bar, across their rotations. Rotation rows stay grouped beneath each product.&#10;&#10;Source: 360deg_tx rotation sweeps. Products without that test do not appear here.">i</span></h4>
+							<p class="cross-report-subtitle">One chart per band/BW: product header rows group the rotation rows beneath them; color still encodes simulated iPhone bars.</p>
+						</div>
+						<div id="iphoneBarsRotationDiv" class="cross-report-chart"></div>
+					</div>
+					<div class="cross-report-chart-block">
+						<div class="cross-report-chart-head">
+							<h4>Antenna pattern (polar)<span class="rf-info" tabindex="0" data-tooltip="Polar plot of RSSI vs azimuth at fixed transmit power, DUT-TX direction. 0° points up; angle increases clockwise.&#10;&#10;Round trace = uniform omnidirectional pattern. Lobed trace = directional pattern; the depth of the nulls measures how much off-axis reach the user loses when the device is not aimed.&#10;&#10;Primary data source is the 360deg_noatten test (atten = NA, rotation varies, typically 5deg increments). Products without that test fall back to the lowest-attenuation step of their 360deg_tx rotation sweep (~45deg increments), shown with a dotted line and labelled with the fallback atten in the trace name.&#10;&#10;Absolute radial values reflect both pattern shape and per-product reference power, so visual focus should be on shape (round vs lobed) rather than absolute level. Each product gets a stable color across facets; Adtran traces are red/orange/yellow, cohort traces cycle a categorical palette. DFS facets included; antenna pattern is independent of DFS regulation.">i</span></h4>
+							<p class="cross-report-subtitle">RSSI vs azimuth at fixed power. Round = uniform; lobed = directional. Primary source is 360deg_noatten; missing products fall back to the lowest-atten step of 360deg_tx (dotted line).</p>
+						</div>
+						<div id="polarDiv" class="cross-report-chart"></div>
+					</div>
+				</div>
+			</div>
 		</div>
 	</main>
 
@@ -239,6 +303,7 @@
 	<script src="qualifi-data.js"></script>
 	<script src="qualifi-ui.js"></script>
 	<script src="qualifi-charts.js"></script>
+	<script src="qualifi-rf-reach.js"></script>
 	<script src="qualifi.js"></script>
 </body>
 </html>

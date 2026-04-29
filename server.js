@@ -22,6 +22,72 @@ const mime_types = {
 	'.svg': 'image/svg+xml'
 };
 
+// CSV parsing for text-csv-0.csv. Handles double-quoted fields with embedded commas
+// and escaped quotes ("") per RFC 4180. Returns { header: string[], rows: string[][] }.
+function csv_parse(text) {
+	const rows = [];
+	let field = '';
+	let row = [];
+	let in_quotes = false;
+	let i = 0;
+	while (i < text.length) {
+		const ch = text[i];
+		if (in_quotes) {
+			if (ch === '"') {
+				if (text[i + 1] === '"') {
+					field += '"';
+					i += 2;
+					continue;
+				}
+				in_quotes = false;
+				i++;
+				continue;
+			}
+			field += ch;
+			i++;
+			continue;
+		}
+		if (ch === '"') { in_quotes = true; i++; continue; }
+		if (ch === ',') { row.push(field); field = ''; i++; continue; }
+		if (ch === '\r') { i++; continue; }
+		if (ch === '\n') {
+			row.push(field);
+			rows.push(row);
+			field = '';
+			row = [];
+			i++;
+			continue;
+		}
+		field += ch;
+		i++;
+	}
+	if (field.length > 0 || row.length > 0) {
+		row.push(field);
+		rows.push(row);
+	}
+	if (rows.length === 0) return { header: [], rows: [] };
+	const header = rows[0].map(s => s.trim());
+	return { header, rows: rows.slice(1).filter(r => r.length === header.length) };
+}
+
+// Mirrors transforms.py::na_to_nan: blank, "NA", "N/A", "nan", "NaN" become null.
+function number_or_null(value) {
+	if (value === undefined || value === null) return null;
+	const trimmed = value.toString().trim();
+	if (trimmed === '' || trimmed === 'NA' || trimmed === 'N/A' || trimmed === 'nan' || trimmed === 'NaN') return null;
+	const num = Number(trimmed);
+	return Number.isFinite(num) ? num : null;
+}
+
+function band_classify(frequency_mhz) {
+	if (frequency_mhz === null || frequency_mhz === undefined || !Number.isFinite(frequency_mhz)) return null;
+	if (frequency_mhz >= 2400 && frequency_mhz <= 2500) return '2.4';
+	if (frequency_mhz >= 5150 && frequency_mhz <= 5350) return '5L';
+	if (frequency_mhz >= 5470 && frequency_mhz <= 5895) return '5H';
+	if (frequency_mhz >= 5925 && frequency_mhz <= 7125) return '6';
+	return null;
+}
+
 // Helper function to check if image file exists
 function check_image_file(file_path) {
 	try {
@@ -248,6 +314,100 @@ const server = http.createServer((req, res) => {
 			res.end('Internal server error');
 		}
 
+		return;
+	}
+
+	// API endpoint: read text-csv-0.csv for one or more test directories and return
+	// the columns needed by the Cross-Report Analysis tab (RSSI heatmap, iPhone bars
+	// heatmap, EIRP-proxy deviation). Mirrors the parsing done by
+	// qualifi/tools/rf_reach_analysis/ingest.py::test_dir_parse for the subset of
+	// columns those three charts depend on.
+	if (pathname === '/api/rf-reach-data') {
+		const search_params = new URLSearchParams(parsed_url.query);
+		const paths_param = search_params.get('paths') || '';
+		const requested_paths = paths_param
+			.split(',')
+			.map(p => p.trim())
+			.filter(p => p.length > 0);
+
+		const resolved_reports_dir = path.resolve(REPORTS_DIR);
+		const out_rows = [];
+		const errors = [];
+
+		for (const requested of requested_paths) {
+			const test_dir_rel = requested.replace(/\/report\.xlsx$/i, '').replace(/\/$/, '');
+			const segments = test_dir_rel.split('/').filter(Boolean);
+			if (segments.length < 4) {
+				errors.push({ path: requested, error: 'path must be vendor/model/sw/test_dir' });
+				continue;
+			}
+			const vendor = segments[0];
+			const model = segments[1];
+			const sw_version = segments[2];
+
+			const csv_path = path.join(REPORTS_DIR, test_dir_rel, 'text-csv-0.csv');
+			const resolved_csv = path.resolve(csv_path);
+			if (!resolved_csv.startsWith(resolved_reports_dir + path.sep)) {
+				errors.push({ path: requested, error: 'path traversal rejected' });
+				continue;
+			}
+			if (!fs.existsSync(resolved_csv)) {
+				errors.push({ path: requested, error: 'text-csv-0.csv not found' });
+				continue;
+			}
+
+			let raw;
+			try {
+				raw = fs.readFileSync(resolved_csv, 'utf8');
+			} catch (read_err) {
+				errors.push({ path: requested, error: `read failed: ${read_err.message}` });
+				continue;
+			}
+
+			const parsed = csv_parse(raw);
+			if (parsed.rows.length === 0) {
+				errors.push({ path: requested, error: 'no data rows' });
+				continue;
+			}
+
+			const col = (name) => parsed.header.indexOf(name);
+			const idx_rssi = col('RSSI');
+			const idx_atten = col('Atten');
+			const idx_freq = col('Frequency');
+			const idx_bw = col('Bandwidth');
+			const idx_dir = col('Direction');
+			const idx_chan = col('Channel');
+			const idx_rot = col('Rotation');
+
+			if (idx_rssi === -1 || idx_atten === -1 || idx_freq === -1 || idx_bw === -1 || idx_dir === -1) {
+				errors.push({ path: requested, error: 'missing required columns in text-csv-0.csv' });
+				continue;
+			}
+
+			for (const fields of parsed.rows) {
+				const frequency_mhz = number_or_null(fields[idx_freq]);
+				const band = band_classify(frequency_mhz);
+				let rssi = number_or_null(fields[idx_rssi]);
+				if (rssi !== null && rssi >= 0) rssi = null; // sentinel for lost link, matches ingest.py
+				out_rows.push({
+					vendor,
+					model,
+					sw_version,
+					test_dir_rel,
+					direction: fields[idx_dir] || '',
+					channel: idx_chan !== -1 ? number_or_null(fields[idx_chan]) : null,
+					frequency_mhz,
+					bandwidth_mhz: number_or_null(fields[idx_bw]),
+					band,
+					atten_db: number_or_null(fields[idx_atten]),
+					rotation_deg: idx_rot !== -1 ? number_or_null(fields[idx_rot]) : null,
+					rssi_dbm: rssi
+				});
+			}
+		}
+
+		res.writeHead(200, { 'Content-Type': 'application/json', ...cors_headers });
+		res.end(JSON.stringify({ rows: out_rows, errors }));
 		return;
 	}
 
