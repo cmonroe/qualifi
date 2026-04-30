@@ -60,16 +60,24 @@ function handle_swipe() {
 	}
 }
 
-Chart.defaults.font.family = "var(--primary-font)";
-Chart.defaults.color = '#e0e0e0';
+// Initial Chart.js defaults use a system fallback. The fontLoaded listener
+// below replaces them with the resolved --mono-font (Berkeley Mono if
+// installed, IBM Plex Mono otherwise) once the font loader finishes.
+Chart.defaults.font.family = "'IBM Plex Mono', 'SF Mono', 'Monaco', monospace";
+Chart.defaults.color = getComputedStyle(document.documentElement)
+	.getPropertyValue('--text-secondary').trim() || '#e5e7eb';
 
 window.addEventListener('fontLoaded', function(event) {
-	const fontFamily = event.detail.font === 'Berkeley Mono' ?
-		"'Berkeley Mono', 'Courier New', monospace" :
-		"'Poppins', sans-serif";
-
-	Chart.defaults.font.family = fontFamily;
-	console.log('Chart.js font updated to:', fontFamily);
+	const root_styles = getComputedStyle(document.documentElement);
+	const mono_family = root_styles.getPropertyValue('--mono-font').trim();
+	if (mono_family) {
+		Chart.defaults.font.family = mono_family;
+	}
+	const text_color = root_styles.getPropertyValue('--text-secondary').trim();
+	if (text_color) {
+		Chart.defaults.color = text_color;
+	}
+	console.log('Chart.js font updated to:', mono_family, '/ mono:', event.detail.mono);
 
 	if (chart_instance) {
 		chart_instance.update();

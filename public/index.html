@@ -12,80 +12,78 @@
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/gifshot@0.4.5/dist/gifshot.min.js"></script>
 	<script>
-		// Dynamic font loading - try Berkeley Mono first, fallback to Poppins
+		// Font selection. Berkeley Mono (when present on the server) is used for
+		// both body and mono. When absent, body falls back to Poppins and mono to
+		// IBM Plex Mono per the SmartOS WebUI design language. Both fallbacks are
+		// loaded from Google Fonts on demand.
 		(function() {
-			// Function to check if a font is available
 			function checkFont(fontName) {
 				const testString = 'abcdefghijklmnopqrstuvwxyz0123456789';
 				const testSize = '72px';
 				const fallbackFont = 'monospace';
-
 				const canvas = document.createElement('canvas');
 				const context = canvas.getContext('2d');
-
 				context.font = testSize + ' ' + fallbackFont;
 				const fallbackWidth = context.measureText(testString).width;
-
 				context.font = testSize + ' ' + fontName + ', ' + fallbackFont;
 				const testWidth = context.measureText(testString).width;
-
 				return testWidth !== fallbackWidth;
 			}
 
-			// Function to load Poppins from Google Fonts
-			function loadPoppins() {
-				if (!document.querySelector('link[href*="fonts.googleapis.com"]')) {
-					const link = document.createElement('link');
-					link.rel = 'preconnect';
-					link.href = 'https://fonts.googleapis.com';
-					document.head.appendChild(link);
+			function loadGoogleFonts() {
+				const preconnect1 = document.createElement('link');
+				preconnect1.rel = 'preconnect';
+				preconnect1.href = 'https://fonts.googleapis.com';
+				document.head.appendChild(preconnect1);
 
-					const link2 = document.createElement('link');
-					link2.rel = 'preconnect';
-					link2.href = 'https://fonts.gstatic.com';
-					link2.crossOrigin = 'anonymous';
-					document.head.appendChild(link2);
+				const preconnect2 = document.createElement('link');
+				preconnect2.rel = 'preconnect';
+				preconnect2.href = 'https://fonts.gstatic.com';
+				preconnect2.crossOrigin = 'anonymous';
+				document.head.appendChild(preconnect2);
 
-					const link3 = document.createElement('link');
-					link3.href = 'https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap';
-					link3.rel = 'stylesheet';
-					document.head.appendChild(link3);
-				}
+				const poppins = document.createElement('link');
+				poppins.rel = 'stylesheet';
+				poppins.href = 'https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap';
+				document.head.appendChild(poppins);
+
+				const plex = document.createElement('link');
+				plex.rel = 'stylesheet';
+				plex.href = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&display=swap';
+				document.head.appendChild(plex);
 			}
 
-			// Store font preference globally
 			window.QUALIFI_FONT = 'Berkeley Mono';
+			window.QUALIFI_MONO = 'Berkeley Mono';
 
-			// Wait for DOM and fonts to load
 			document.addEventListener('DOMContentLoaded', function() {
-				// Give Berkeley Mono a moment to load if it's available
 				setTimeout(function() {
-					if (!checkFont('Berkeley Mono')) {
-						console.log('Berkeley Mono not found, loading Poppins as fallback');
-						window.QUALIFI_FONT = 'Poppins';
-						loadPoppins();
-
-						// Update CSS custom properties for Poppins
-						document.documentElement.style.setProperty('--primary-font', "'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif");
-						document.documentElement.style.setProperty('--chart-font', "'Poppins', sans-serif");
-
-						// Adjust font weights for Poppins (slightly lighter than monospace)
-						document.documentElement.style.setProperty('--font-weight-normal', '400');
-						document.documentElement.style.setProperty('--font-weight-medium', '500');
-						document.documentElement.style.setProperty('--font-weight-bold', '600');
-					} else {
-						console.log('Berkeley Mono detected and loaded');
-						document.documentElement.style.setProperty('--primary-font', "'Berkeley Mono', monospace");
-						document.documentElement.style.setProperty('--chart-font', "'Berkeley Mono', monospace");
-
-						// Berkeley Mono font weights
+					if (checkFont('Berkeley Mono')) {
+						console.log('Berkeley Mono detected; using it for body and mono');
+						window.QUALIFI_FONT = 'Berkeley Mono';
+						window.QUALIFI_MONO = 'Berkeley Mono';
+						document.documentElement.style.setProperty('--primary-font', "'Berkeley Mono', 'SF Mono', 'Monaco', monospace");
+						document.documentElement.style.setProperty('--mono-font', "'Berkeley Mono', 'SF Mono', 'Monaco', monospace");
+						document.documentElement.style.setProperty('--chart-font', "'Berkeley Mono', 'SF Mono', 'Monaco', monospace");
 						document.documentElement.style.setProperty('--font-weight-normal', '400');
 						document.documentElement.style.setProperty('--font-weight-medium', '500');
 						document.documentElement.style.setProperty('--font-weight-bold', '700');
+					} else {
+						console.log('Berkeley Mono not found; using Poppins (body) and IBM Plex Mono (mono)');
+						window.QUALIFI_FONT = 'Poppins';
+						window.QUALIFI_MONO = 'IBM Plex Mono';
+						loadGoogleFonts();
+						document.documentElement.style.setProperty('--primary-font', "'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif");
+						document.documentElement.style.setProperty('--mono-font', "'IBM Plex Mono', 'SF Mono', 'Monaco', monospace");
+						document.documentElement.style.setProperty('--chart-font', "'IBM Plex Mono', 'SF Mono', 'Monaco', monospace");
+						document.documentElement.style.setProperty('--font-weight-normal', '400');
+						document.documentElement.style.setProperty('--font-weight-medium', '500');
+						document.documentElement.style.setProperty('--font-weight-bold', '600');
 					}
 
-					// Trigger a custom event that the main JS can listen for
-					window.dispatchEvent(new CustomEvent('fontLoaded', { detail: { font: window.QUALIFI_FONT } }));
+					window.dispatchEvent(new CustomEvent('fontLoaded', {
+						detail: { font: window.QUALIFI_FONT, mono: window.QUALIFI_MONO }
+					}));
 				}, 100);
 			});
 		})();
@@ -297,7 +295,7 @@
 	</main>
 
 	<footer>
-		<div class="version">QualiFi v0.8.5</div>
+		<div class="version">QualiFi v0.9.2</div>
 	</footer>
 
 	<script src="qualifi-data.js"></script>

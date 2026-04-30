@@ -46,13 +46,14 @@ const RF_REACH_EIRP_WINDOW = [5, 50];
 // definition; both must stay in sync.
 const RF_REACH_BARS_THRESHOLDS = [-65, -75, -85];
 
-// Colorscales are tuned for the qualifi dark theme (--bg-primary #0a0a0a,
-// --bg-tertiary #1a1a1a). Avoid near-black stops that blend with the chart
-// background. RSSI uses a cool blue->teal->mint ramp (continuous physical
-// signal); bars uses a stoplight red/amber/green ramp (perceptual buckets).
-// Different palettes prevent the two charts from being visually conflated.
+// Colorscales are tuned for the SmartOS dark surface
+// (--bg-primary #0b0f19, --bg-card #151c2c, --bg-card-hover #1a2236). Avoid
+// near-black stops that blend with the chart background. RSSI uses a cool
+// blue->teal->mint ramp (continuous physical signal); bars uses a stoplight
+// red/amber/green ramp (perceptual buckets). Different palettes prevent the
+// two charts from being visually conflated.
 const RF_REACH_RSSI_COLORSCALE = [
-	[0.0, '#1e3a5f'],   // ~-100 dBm: deep blue, visible against #1a1a1a
+	[0.0, '#1e3a5f'],   // ~-100 dBm: deep blue, visible against #1a2236
 	[0.2, '#0369a1'],   // ~-84 dBm: steel blue
 	[0.4, '#0891b2'],   // ~-68 dBm: cyan
 	[0.6, '#14b8a6'],   // ~-52 dBm: teal
@@ -75,46 +76,80 @@ const RF_REACH_BARS_COLORSCALE = [
 	[1.0,     '#22c55e']    // 3 bars: green
 ];
 
-const RF_REACH_TEXT_PRIMARY = '#f0f0f0';
-const RF_REACH_TEXT_SECONDARY = '#c8c8c8';
-const RF_REACH_GRID_COLOR = '#2a2a2a';
-const RF_REACH_LINE_COLOR = '#404040';
+// Plotly draws to canvas/SVG and does NOT resolve CSS variables in font.family,
+// so we read the design-token values at chart render time. The font tracks the
+// font loader IIFE (Berkeley Mono if installed, IBM Plex Mono otherwise).
+function rf_reach_css_var(name, fallback) {
+	const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+	return value || fallback || '';
+}
 
-const RF_REACH_AXIS_BASE = {
-	color: RF_REACH_TEXT_SECONDARY,
-	gridcolor: RF_REACH_GRID_COLOR,
-	linecolor: RF_REACH_LINE_COLOR,
-	zerolinecolor: RF_REACH_LINE_COLOR,
-	tickfont: { color: RF_REACH_TEXT_SECONDARY, size: 11 },
-	automargin: true
-};
+function rf_reach_mono_font() {
+	return rf_reach_css_var('--mono-font', "'IBM Plex Mono', 'SF Mono', monospace");
+}
 
-const RF_REACH_TITLE_FONT = {
-	color: RF_REACH_TEXT_PRIMARY,
-	size: 15,
-	family: 'var(--primary-font)'
-};
+function rf_reach_palette() {
+	return {
+		text_primary: rf_reach_css_var('--text-primary', '#ffffff'),
+		text_secondary: rf_reach_css_var('--text-secondary', '#a0a0a0'),
+		text_tertiary: rf_reach_css_var('--text-tertiary', '#707070'),
+		grid: rf_reach_css_var('--border-subtle', '#2a2a2a'),
+		line: rf_reach_css_var('--border-default', '#333333'),
+		zero_line: rf_reach_css_var('--border-strong', '#525252'),
+		tooltip_bg: rf_reach_css_var('--bg-tooltip', '#1f1f1f'),
+		danger: rf_reach_css_var('--accent-danger', '#ff3b30'),
+		success: rf_reach_css_var('--accent-success', '#00c896')
+	};
+}
 
-const RF_REACH_COLORBAR_BASE = {
-	tickfont: { color: RF_REACH_TEXT_SECONDARY, size: 10 },
-	outlinecolor: RF_REACH_LINE_COLOR,
-	outlinewidth: 1,
-	thickness: 12,
-	len: 0.85,
-	x: 1.02
-};
+function rf_reach_axis_base() {
+	const p = rf_reach_palette();
+	const f = rf_reach_mono_font();
+	return {
+		color: p.text_secondary,
+		gridcolor: p.grid,
+		linecolor: p.line,
+		zerolinecolor: p.zero_line,
+		tickfont: { color: p.text_tertiary, family: f, size: 11 },
+		automargin: true
+	};
+}
 
-const RF_REACH_PLOT_LAYOUT_BASE = {
-	paper_bgcolor: 'transparent',
-	plot_bgcolor: 'transparent',
-	font: { color: RF_REACH_TEXT_SECONDARY, family: 'var(--primary-font)', size: 12 },
-	margin: { l: 200, r: 80, t: 56, b: 60 },
-	hoverlabel: {
-		bgcolor: '#1f1f1f',
-		bordercolor: RF_REACH_LINE_COLOR,
-		font: { color: RF_REACH_TEXT_PRIMARY, family: 'var(--primary-font)', size: 12 }
-	}
-};
+function rf_reach_title_font() {
+	return {
+		color: rf_reach_palette().text_primary,
+		size: 14,
+		family: rf_reach_mono_font()
+	};
+}
+
+function rf_reach_colorbar_base() {
+	const p = rf_reach_palette();
+	return {
+		tickfont: { color: p.text_tertiary, family: rf_reach_mono_font(), size: 10 },
+		outlinecolor: p.line,
+		outlinewidth: 1,
+		thickness: 12,
+		len: 0.85,
+		x: 1.02
+	};
+}
+
+function rf_reach_layout_base() {
+	const p = rf_reach_palette();
+	const f = rf_reach_mono_font();
+	return {
+		paper_bgcolor: 'transparent',
+		plot_bgcolor: 'transparent',
+		font: { color: p.text_secondary, family: f, size: 12 },
+		margin: { l: 200, r: 80, t: 56, b: 60 },
+		hoverlabel: {
+			bgcolor: p.tooltip_bg,
+			bordercolor: p.line,
+			font: { color: p.text_primary, family: f, size: 12 }
+		}
+	};
+}
 
 function rf_reach_heatmap_height_compute(y_count) {
 	return Math.max(260, 60 + 28 * y_count);
@@ -466,22 +501,22 @@ function rf_reach_faceted_heatmap_render(container, rows, config) {
 			y: y_keys_ordered,
 			...config.trace
 		}], {
-			...RF_REACH_PLOT_LAYOUT_BASE,
+			...rf_reach_layout_base(),
 			...layout_overrides,
 			title: {
 				text: rf_reach_facet_label(facet.unii_band, facet.bw_mhz),
-				font: RF_REACH_TITLE_FONT,
+				font: rf_reach_title_font(),
 				x: 0.02,
 				xanchor: 'left',
 				y: 0.97
 			},
 			xaxis: {
-				...RF_REACH_AXIS_BASE,
-				title: { text: 'attenuation (dB)', font: { color: RF_REACH_TEXT_SECONDARY, size: 11 } },
+				...rf_reach_axis_base(),
+				title: { text: 'attenuation (dB)', font: { color: rf_reach_palette().text_tertiary, family: rf_reach_mono_font(), size: 11 } },
 				dtick: 5,
 				range: x_range
 			},
-			yaxis: { ...RF_REACH_AXIS_BASE, autorange: 'reversed' }
+			yaxis: { ...rf_reach_axis_base(), autorange: 'reversed' }
 		}, { responsive: true, displayModeBar: false });
 	});
 }
@@ -493,8 +528,8 @@ function chart_rssi_heatmap_render(container, rows) {
 			zmin: RF_REACH_RSSI_ZRANGE[0],
 			zmax: RF_REACH_RSSI_ZRANGE[1],
 			colorbar: {
-				...RF_REACH_COLORBAR_BASE,
-				title: { text: 'RSSI dBm', side: 'right', font: { color: RF_REACH_TEXT_SECONDARY, size: 11 } },
+				...rf_reach_colorbar_base(),
+				title: { text: 'RSSI dBm', side: 'right', font: { color: rf_reach_palette().text_tertiary, family: rf_reach_mono_font(), size: 11 } },
 				tickvals: [-100, -85, -75, -65, -50, -20]
 			},
 			hovertemplate: '<b>%{y}</b><br>atten %{x:.0f} dB<br>RSSI %{z:.1f} dBm<extra></extra>'
@@ -526,7 +561,7 @@ function chart_iphone_bars_render(container, rows) {
 	rf_reach_faceted_heatmap_render(container, rows, {
 		z_transform: v => v === null ? null : rf_reach_iphone_bars_compute(v),
 		legend_fn: rf_reach_bars_legend_create,
-		layout: { margin: { ...RF_REACH_PLOT_LAYOUT_BASE.margin, r: 24 } },
+		layout: { margin: { ...rf_reach_layout_base().margin, r: 24 } },
 		trace: {
 			colorscale: RF_REACH_BARS_COLORSCALE,
 			zmin: 0,
@@ -570,32 +605,32 @@ function chart_eirp_deviation_render_internal(container, summary, empty_message)
 			},
 			text: text_labels,
 			textposition: 'outside',
-			textfont: { color: RF_REACH_TEXT_PRIMARY, size: 12, family: 'var(--primary-font)' },
+			textfont: { color: rf_reach_palette().text_primary, size: 12, family: rf_reach_mono_font() },
 			cliponaxis: false,
 			hovertemplate: '<b>%{x}</b><br>deviation: %{y:.2f} dB<br>cohort median: ' + cohort_med.toFixed(1) + ' dB<extra></extra>',
 			showlegend: false
 		}], {
-			...RF_REACH_PLOT_LAYOUT_BASE,
+			...rf_reach_layout_base(),
 			hovermode: 'closest',
 			title: {
 				text: `${rf_reach_facet_label(facet.unii_band, facet.bw_mhz)}  (cohort median = ${cohort_med.toFixed(1)} dB)`,
-				font: RF_REACH_TITLE_FONT,
+				font: rf_reach_title_font(),
 				x: 0.02,
 				xanchor: 'left',
 				y: 0.97
 			},
 			xaxis: {
-				...RF_REACH_AXIS_BASE,
+				...rf_reach_axis_base(),
 				tickangle: -30,
 				gridcolor: 'transparent',
 				linecolor: 'transparent'
 			},
 			yaxis: {
-				...RF_REACH_AXIS_BASE,
-				title: { text: 'deviation from cohort median (dB)', font: { color: RF_REACH_TEXT_SECONDARY, size: 11 } },
+				...rf_reach_axis_base(),
+				title: { text: 'deviation from cohort median (dB)', font: { color: rf_reach_palette().text_tertiary, family: rf_reach_mono_font(), size: 11 } },
 				zeroline: true,
 				zerolinewidth: 1,
-				zerolinecolor: '#525252',
+				zerolinecolor: rf_reach_palette().zero_line,
 				griddash: 'dot',
 				range: [-(max_abs + y_pad), max_abs + y_pad]
 			},
@@ -774,24 +809,24 @@ function chart_iphone_bars_rotation_render(container, rows) {
 				+ '%{z:.0f} bars<br>'
 				+ 'RSSI %{customdata[2]:.1f} dBm<extra></extra>'
 		}], {
-			...RF_REACH_PLOT_LAYOUT_BASE,
-			margin: { ...RF_REACH_PLOT_LAYOUT_BASE.margin, r: 24 },
+			...rf_reach_layout_base(),
+			margin: { ...rf_reach_layout_base().margin, r: 24 },
 			hovermode: 'closest',
 			title: {
 				text: rf_reach_facet_label(facet.unii_band, facet.bw_mhz),
-				font: RF_REACH_TITLE_FONT,
+				font: rf_reach_title_font(),
 				x: 0.02,
 				xanchor: 'left',
 				y: 0.97
 			},
 			xaxis: {
-				...RF_REACH_AXIS_BASE,
-				title: { text: 'attenuation (dB)', font: { color: RF_REACH_TEXT_SECONDARY, size: 11 } },
+				...rf_reach_axis_base(),
+				title: { text: 'attenuation (dB)', font: { color: rf_reach_palette().text_tertiary, family: rf_reach_mono_font(), size: 11 } },
 				dtick: 5,
 				range: attens.length ? [attens[0], attens[attens.length - 1]] : undefined
 			},
 			yaxis: {
-				...RF_REACH_AXIS_BASE,
+				...rf_reach_axis_base(),
 				autorange: 'reversed',
 				tickmode: 'array',
 				tickvals: y_keys,
@@ -802,7 +837,8 @@ function chart_iphone_bars_rotation_render(container, rows) {
 }
 
 // Deterministic per (vendor, model) so the legend chip and trace line stay in
-// sync, and so the same product keeps the same colour across facets.
+// sync, and so the same product keeps the same colour across facets. Original
+// qualifi RF Reach cohort palette.
 const RF_REACH_POLAR_COLORS = [
 	'#22d3ee', '#ef4444', '#a78bfa', '#34d399', '#fb923c',
 	'#60a5fa', '#f472b6', '#fbbf24', '#f97316', '#facc15', '#94a3b8'
@@ -978,33 +1014,37 @@ function chart_polar_render(container, polar_rows, azimuth_rows) {
 			r_range = [Math.floor(r_min - 5), Math.ceil(r_max + 2)];
 		}
 		Plotly.newPlot(divs[i], traces, {
-			...RF_REACH_PLOT_LAYOUT_BASE,
+			...rf_reach_layout_base(),
 			title: {
 				text: rf_reach_facet_label(facet.unii_band, facet.bw_mhz),
-				font: RF_REACH_TITLE_FONT,
+				font: rf_reach_title_font(),
 				x: 0.02,
 				xanchor: 'left',
 				y: 0.97
 			},
-			polar: {
-				bgcolor: 'transparent',
-				angularaxis: {
-					direction: 'clockwise',
-					rotation: 90,
-					color: RF_REACH_TEXT_SECONDARY,
-					gridcolor: RF_REACH_GRID_COLOR,
-					linecolor: RF_REACH_LINE_COLOR,
-					tickfont: { color: RF_REACH_TEXT_SECONDARY, size: 10 }
-				},
-				radialaxis: {
-					color: RF_REACH_TEXT_SECONDARY,
-					gridcolor: RF_REACH_GRID_COLOR,
-					linecolor: RF_REACH_LINE_COLOR,
-					tickfont: { color: RF_REACH_TEXT_SECONDARY, size: 10 },
-					tickangle: 90,
-					...(r_range ? { range: r_range, autorange: false } : {})
-				}
-			},
+			polar: (() => {
+				const p = rf_reach_palette();
+				const f = rf_reach_mono_font();
+				return {
+					bgcolor: 'transparent',
+					angularaxis: {
+						direction: 'clockwise',
+						rotation: 90,
+						color: p.text_secondary,
+						gridcolor: p.grid,
+						linecolor: p.line,
+						tickfont: { color: p.text_tertiary, family: f, size: 10 }
+					},
+					radialaxis: {
+						color: p.text_secondary,
+						gridcolor: p.grid,
+						linecolor: p.line,
+						tickfont: { color: p.text_tertiary, family: f, size: 10 },
+						tickangle: 90,
+						...(r_range ? { range: r_range, autorange: false } : {})
+					}
+				};
+			})(),
 			margin: { l: 40, r: 40, t: 56, b: 40 }
 		}, { responsive: true, displayModeBar: false });
 	});

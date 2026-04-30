@@ -1,7 +1,42 @@
+// Resolve a CSS custom property from <html> at call time. Used to keep chart
+// colors/fonts in sync with the qualifi.css design tokens after the font
+// loader IIFE finishes (--mono-font in particular changes between Berkeley
+// Mono and IBM Plex Mono depending on what is installed on the server).
+function get_css_var(name, fallback) {
+	const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+	return value || fallback || '';
+}
+
+function chart_font_family() {
+	return get_css_var('--mono-font', "'IBM Plex Mono', 'SF Mono', monospace");
+}
+
+function chart_palette() {
+	return {
+		text_primary: get_css_var('--text-primary', '#ffffff'),
+		text_secondary: get_css_var('--text-secondary', '#a0a0a0'),
+		text_tertiary: get_css_var('--text-tertiary', '#707070'),
+		grid: get_css_var('--border-subtle', '#2a2a2a'),
+		axis_line: get_css_var('--border-default', '#333333'),
+		tooltip_bg: get_css_var('--bg-tooltip', '#1f1f1f'),
+		tooltip_border: get_css_var('--border-default', '#333333'),
+		tx: get_css_var('--tx-color', '#0080ff'),
+		rx: get_css_var('--rx-color', '#ff3b30'),
+		cyan: get_css_var('--accent-cyan', '#0080ff'),
+		green: get_css_var('--accent-success', '#00c896'),
+		amber: get_css_var('--accent-warning', '#ff9500'),
+		red: get_css_var('--accent-danger', '#ff3b30'),
+		blue: get_css_var('--accent-blue', '#0080ff'),
+		purple: get_css_var('--accent-purple', '#845ef7')
+	};
+}
+
 function get_responsive_chart_config() {
 	const is_small_screen = window.innerWidth <= 768;
 	const is_tablet = window.innerWidth <= 1024 && window.innerWidth > 768;
 	const is_very_small = window.innerWidth <= 480;
+	const palette = chart_palette();
+	const font_family = chart_font_family();
 
 	return {
 		responsive: true,
@@ -16,18 +51,20 @@ function get_responsive_chart_config() {
 				mode: 'index',
 				intersect: false,
 				displayColors: true,
-				backgroundColor: 'rgba(0, 0, 0, 0.95)',
-				titleColor: '#ffffff',
-				bodyColor: '#e0e0e0',
-				borderColor: '#333333',
+				backgroundColor: palette.tooltip_bg,
+				titleColor: palette.text_primary,
+				bodyColor: palette.text_secondary,
+				borderColor: palette.tooltip_border,
 				borderWidth: 1,
 				cornerRadius: 6,
 				padding: is_small_screen ? 8 : 12,
 				titleFont: {
+					family: font_family,
 					size: is_small_screen ? 11 : 13,
 					weight: 'bold'
 				},
 				bodyFont: {
+					family: font_family,
 					size: is_small_screen ? 10 : 12
 				},
 				callbacks: {
@@ -46,8 +83,9 @@ function get_responsive_chart_config() {
 				display: !is_small_screen,
 				position: is_tablet ? 'bottom' : 'top',
 				labels: {
-					color: '#e0e0e0',
+					color: palette.text_secondary,
 					font: {
+						family: font_family,
 						size: is_small_screen ? 10 : 12
 					},
 					padding: is_small_screen ? 8 : 16,
@@ -62,42 +100,46 @@ function get_responsive_chart_config() {
 				title: {
 					display: true,
 					text: 'Attenuation (dB)',
-					color: '#e0e0e0',
+					color: palette.text_secondary,
 					font: {
+						family: font_family,
 						size: is_small_screen ? 10 : 12,
 						weight: 'bold'
 					}
 				},
 				ticks: {
-					color: '#a0a0a0',
+					color: palette.text_tertiary,
 					font: {
+						family: font_family,
 						size: is_small_screen ? 9 : 11
 					},
 					maxTicksLimit: is_small_screen ? 6 : 10
 				},
 				grid: {
-					color: '#2a2a2a'
+					color: palette.grid
 				}
 			},
 			y: {
 				title: {
 					display: true,
 					text: 'Throughput (Mbps)',
-					color: '#e0e0e0',
+					color: palette.text_secondary,
 					font: {
+						family: font_family,
 						size: is_small_screen ? 10 : 12,
 						weight: 'bold'
 					}
 				},
 				ticks: {
-					color: '#a0a0a0',
+					color: palette.text_tertiary,
 					font: {
+						family: font_family,
 						size: is_small_screen ? 9 : 11
 					},
 					maxTicksLimit: is_small_screen ? 6 : 8
 				},
 				grid: {
-					color: '#2a2a2a'
+					color: palette.grid
 				}
 			}
 		},
@@ -395,6 +437,7 @@ function draw_polar_chart(selected_tests, attenuation_filter = null) {
 	const has_rvr_rotation = test_types.has('rvr_rotation');
 
 	const traces = [];
+	const palette = chart_palette();
 	const colors = ['#0080ff', '#ff3b30', '#00c896', '#ff9500', '#5856d6', '#ff2d55', '#ffcc00', '#34c759'];
 	let color_index = 0;
 
@@ -476,9 +519,11 @@ function draw_polar_chart(selected_tests, attenuation_filter = null) {
 	});
 
 	if (traces.length === 0) {
-		polar_chart_div.innerHTML = '<div style="text-align: center; padding: 100px; color: #888;">No rotation data available for polar plot</div>';
+		polar_chart_div.innerHTML = `<div style="text-align: center; padding: 100px; color: ${palette.text_tertiary};">No rotation data available for polar plot</div>`;
 		return;
 	}
+
+	const font_family = chart_font_family();
 
 	const layout = {
 		polar: {
@@ -486,17 +531,18 @@ function draw_polar_chart(selected_tests, attenuation_filter = null) {
 				title: {
 					text: 'Throughput (Mbps)',
 					font: {
-						family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', monospace" : "'Poppins', sans-serif",
+						family: font_family,
 						size: 14,
-						color: '#e0e0e0'
+						color: palette.text_secondary
 					}
 				},
 				visible: true,
 				range: [0, null],
-				color: '#e0e0e0',
-				gridcolor: '#333',
+				color: palette.text_secondary,
+				gridcolor: palette.grid,
 				tickfont: {
-					color: '#e0e0e0'
+					family: font_family,
+					color: palette.text_tertiary
 				}
 			},
 			angularaxis: {
@@ -506,10 +552,11 @@ function draw_polar_chart(selected_tests, attenuation_filter = null) {
 				tickmode: 'linear',
 				tick0: 0,
 				dtick: 45,
-				color: '#e0e0e0',
-				gridcolor: '#333',
+				color: palette.text_secondary,
+				gridcolor: palette.grid,
 				tickfont: {
-					color: '#e0e0e0'
+					family: font_family,
+					color: palette.text_tertiary
 				}
 			},
 			bgcolor: 'rgba(0, 0, 0, 0)'
@@ -517,12 +564,12 @@ function draw_polar_chart(selected_tests, attenuation_filter = null) {
 		showlegend: true,
 		legend: {
 			font: {
-				family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', monospace" : "'Poppins', sans-serif",
+				family: font_family,
 				size: 10,
-				color: '#e0e0e0'
+				color: palette.text_secondary
 			},
-			bgcolor: 'rgba(20, 20, 20, 0.8)',
-			bordercolor: '#333',
+			bgcolor: get_css_var('--bg-elevated', '#1a2236'),
+			bordercolor: palette.tooltip_border,
 			borderwidth: 1,
 			orientation: 'h',
 			x: 0.5,
@@ -533,20 +580,20 @@ function draw_polar_chart(selected_tests, attenuation_filter = null) {
 		title: attenuation_filter !== null ? {
 			text: `Attenuation: ${attenuation_filter} dB`,
 			font: {
-				family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', monospace" : "'Poppins', sans-serif",
+				family: font_family,
 				size: 16,
-				color: '#e0e0e0'
+				color: palette.text_primary
 			},
 			x: 0.5,
 			xanchor: 'center',
 			y: 1.02,
 			yanchor: 'bottom'
 		} : undefined,
-		paper_bgcolor: '#0a0a0a',
-		plot_bgcolor: '#0a0a0a',
+		paper_bgcolor: 'transparent',
+		plot_bgcolor: 'transparent',
 		font: {
-			family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', monospace" : "'Poppins', sans-serif",
-			color: '#e0e0e0'
+			family: font_family,
+			color: palette.text_secondary
 		},
 		margin: {
 			l: 80,
@@ -660,7 +707,7 @@ function updateChart() {
 
 			const hint = document.createElement('div');
 			hint.style.fontSize = '0.85em';
-			hint.style.color = '#888';
+			hint.style.color = get_css_var('--text-tertiary', '#9ca3af');
 			hint.style.marginTop = '8px';
 			hint.textContent = 'Hold Ctrl/Cmd to select multiple angles';
 			angle_checkboxes_container.appendChild(hint);
@@ -811,7 +858,9 @@ function drawChart(selected_tests) {
 		}
 	});
 
-	// Define expanded color palette for different test configurations
+	// Original qualifi categorical palette: 36 distinct entries for
+	// many-device comparisons; visually-similar shades are spaced so adjacent
+	// traces never share a hue.
 	const allColors = [
 		'#00a0c8', '#f72585', '#4361ee', '#ffbe0b', '#fb5607', '#3a0ca3',
 		'#3da9db', '#e01e70', '#3651de', '#f0b000', '#ec4800', '#2b0c94',
@@ -991,6 +1040,8 @@ function drawChart(selected_tests) {
 	// Get responsive configuration
 	const responsive_config = get_responsive_chart_config();
 	const is_small_screen = window.innerWidth <= 768;
+	const palette_opt = chart_palette();
+	const font_family_opt = chart_font_family();
 
 	chart_instance = new Chart(ctx, {
 		type: chart_type,
@@ -1004,20 +1055,20 @@ function drawChart(selected_tests) {
 				title: {
 					display: !is_small_screen,
 					text: 'WiFi Rate vs Range',
-					color: '#e0e0e0',
+					color: palette_opt.text_primary,
 					font: {
 						size: is_small_screen ? 14 : 18,
 						weight: '700',
-						family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif"
+						family: font_family_opt
 					}
 				},
 				subtitle: {
 					display: !is_small_screen,
 					text: `Comparing ${uniqueConfigs.size} test configuration(s) across ${Array.from(new Set(tests_to_render.map(t => t.device_info?.Name || t.file_name))).length} device(s) | Solid: TX, Dotted: RX | Different point styles for multiple tests per DUT model`,
-					color: '#aaa',
+					color: palette_opt.text_tertiary,
 					font: {
 						size: is_small_screen ? 10 : 14,
-						family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif"
+						family: font_family_opt
 					}
 				},
 				legend: {
@@ -1036,23 +1087,23 @@ function drawChart(selected_tests) {
 					title: {
 						display: false,
 						text: 'Legend shows baseline (0dB) configuration - hover points for actual PHY parameters',
-						color: '#888',
+						color: palette_opt.text_muted || palette_opt.text_tertiary,
 						font: {
 							size: 10,
-							family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif",
+							family: font_family_opt,
 							weight: 'normal'
 						},
 						padding: 5
 					},
 					labels: {
 						...responsive_config.plugins.legend.labels,
-						color: '#e0e0e0',
+						color: palette_opt.text_secondary,
 						padding: is_small_screen ? 6 : 10,
 						boxWidth: is_small_screen ? 15 : 20,
 						boxHeight: is_small_screen ? 8 : 10,
 						font: {
 							size: is_small_screen ? 9 : 10,
-							family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif"
+							family: font_family_opt
 						},
 						generateLabels: function(chart) {
 							const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
@@ -1123,7 +1174,7 @@ function drawChart(selected_tests) {
 										hidden: false,
 										index: -1,
 										datasetIndex: -1,
-										fontColor: '#e0e0e0',
+										fontColor: palette_opt.text_primary,
 										fontStyle: 'bold'
 									});
 
@@ -1260,24 +1311,26 @@ function drawChart(selected_tests) {
 					title: {
 						display: true,
 						text: is_pure_rotation ? 'Rotation Angle (degrees)' : 'Attenuation (dB)',
-						color: '#e0e0e0',
+						color: palette_opt.text_secondary,
 						font: {
 							size: 14,
-							family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif"
+							family: font_family_opt
 						}
 					},
 					grid: {
-						color: '#333',
-						borderColor: '#555'
+						color: palette_opt.grid,
+						borderColor: palette_opt.axis_line
 					},
 					ticks: {
-						color: '#e0e0e0'
+						color: palette_opt.text_tertiary,
+						font: { family: font_family_opt }
 					},
 					...(is_pure_rotation ? {
 						min: 0,
 						max: 360,
 						ticks: {
-							color: '#e0e0e0',
+							color: palette_opt.text_tertiary,
+							font: { family: font_family_opt },
 							stepSize: 45
 						}
 					} : {})
@@ -1287,18 +1340,19 @@ function drawChart(selected_tests) {
 					title: {
 						display: true,
 						text: 'Throughput (Mbps)',
-						color: '#e0e0e0',
+						color: palette_opt.text_secondary,
 						font: {
 							size: 14,
-							family: window.QUALIFI_FONT === 'Berkeley Mono' ? "'Berkeley Mono', 'Courier New', monospace" : "'Poppins', sans-serif"
+							family: font_family_opt
 						}
 					},
 					grid: {
-						color: '#333',
-						borderColor: '#555'
+						color: palette_opt.grid,
+						borderColor: palette_opt.axis_line
 					},
 					ticks: {
-						color: '#e0e0e0'
+						color: palette_opt.text_tertiary,
+						font: { family: font_family_opt }
 					}
 				}
 			}

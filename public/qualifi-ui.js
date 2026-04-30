@@ -475,8 +475,7 @@ function update_file_list() {
 					</div>
 				</div>
 				<div style="display: flex; gap: 10px; align-items: center;">
-					<button class="btn-small" onclick="clearDeviceModel('${modelKey}')"
-							style="background: rgba(220, 38, 38, 0.2); border: 1px solid rgba(220, 38, 38, 0.3);">
+					<button class="btn-small btn-remove" onclick="clearDeviceModel('${modelKey}')">
 						Clear Device
 					</button>
 				</div>
@@ -1187,24 +1186,23 @@ function repositionNotifications() {
 
 function show_success(message) {
 	const success = document.createElement('div');
-	const fontFamily = window.QUALIFI_FONT === 'Berkeley Mono' ?
-		"'Berkeley Mono', 'Courier New', monospace" :
-		"'Poppins', sans-serif";
+	const root_styles = getComputedStyle(document.documentElement);
+	const font_family = root_styles.getPropertyValue('--primary-font').trim() || "'Poppins', sans-serif";
 
 	success.style.cssText = `
 		position: fixed;
 		top: 20px;
 		right: 20px;
-		background: rgba(34, 197, 94, 0.4);
-		border: 1px solid rgba(34, 197, 94, 0.6);
-		color: #86efac;
+		background: var(--accent-success-soft);
+		border: 1px solid var(--accent-success);
+		color: var(--accent-success);
 		padding: 15px;
 		border-radius: 8px;
-		font-family: ${fontFamily};
+		font-family: ${font_family};
 		font-weight: 400;
 		z-index: 1000;
 		max-width: 400px;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+		box-shadow: var(--shadow-lg);
 		transition: all 0.3s ease;
 		opacity: 0;
 	`;
