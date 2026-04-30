@@ -1167,15 +1167,52 @@ function chart_polar_render(container, polar_rows, azimuth_rows) {
 	container.insertBefore(legend, container.firstChild);
 }
 
+function rf_reach_status_render(div, counts, notes) {
+	div.textContent = '';
+	const stats = [
+		{ label: 'reports', value: String(counts.reports || 0) },
+		{ label: 'RvR', value: String(counts.rvr || 0) },
+		{ label: 'azimuth', value: String(counts.azimuth || 0) },
+		{ label: 'polar', value: String(counts.polar || 0) },
+	];
+	for (const { label, value } of stats) {
+		const chip = document.createElement('span');
+		chip.className = 'cross-report-status-chip';
+		const label_el = document.createElement('span');
+		label_el.className = 'cross-report-status-chip-label';
+		label_el.textContent = label;
+		const value_el = document.createElement('span');
+		value_el.className = 'cross-report-status-chip-value';
+		value_el.textContent = value;
+		chip.append(label_el, value_el);
+		div.appendChild(chip);
+	}
+	for (const note of notes || []) {
+		if (!note) continue;
+		const chip = document.createElement('span');
+		chip.className = 'cross-report-status-chip cross-report-status-chip--warn';
+		chip.textContent = note;
+		div.appendChild(chip);
+	}
+}
+
+function rf_reach_status_notes_collect(local_count, err_count) {
+	const notes = [];
+	if (local_count > 0) notes.push(`${local_count} local file${local_count === 1 ? '' : 's'} skipped`);
+	if (err_count > 0) notes.push(`${err_count} report${err_count === 1 ? '' : 's'} skipped`);
+	return notes;
+}
+
 function rf_reach_render_cached() {
 	const status_div = document.getElementById('crossReportStatus');
 	if (!rf_reach_cached_context) return;
 
 	rf_reach_last_facet_divs = [];
-	const { normalized, paths, local_suffix, err_suffix } = rf_reach_cached_context;
+	const { normalized, paths, local_count, err_count } = rf_reach_cached_context;
+	const notes = rf_reach_status_notes_collect(local_count, err_count);
 	const selected_labels = rf_reach_selected_band_labels();
 	if (selected_labels.length === 0) {
-		status_div.textContent = `No bands selected; ${paths.length} report${paths.length === 1 ? '' : 's'} loaded${local_suffix}${err_suffix}`;
+		rf_reach_status_render(status_div, { reports: paths.length }, ['no bands selected', ...notes]);
 		rf_reach_charts_clear('No bands selected');
 		return;
 	}
@@ -1184,11 +1221,12 @@ function rf_reach_render_cached() {
 	const rvr_rows = rf_reach_filter_rvr(filtered);
 	const azimuth_rows = rf_reach_filter_azimuth(filtered);
 	const polar_rows = rf_reach_filter_polar(filtered);
-	status_div.textContent =
-		`${paths.length} report${paths.length === 1 ? '' : 's'} loaded; `
-		+ `${rvr_rows.length} RvR / ${azimuth_rows.length} azimuth-sweep / ${polar_rows.length} polar rows; `
-		+ `bands ${selected_labels.join(', ')}`
-		+ `${local_suffix}${err_suffix}`;
+	rf_reach_status_render(status_div, {
+		reports: paths.length,
+		rvr: rvr_rows.length,
+		azimuth: azimuth_rows.length,
+		polar: polar_rows.length,
+	}, notes);
 
 	chart_rssi_heatmap_render(document.getElementById('rssiHeatmapDiv'), rvr_rows);
 	chart_iphone_bars_render(document.getElementById('iphoneBarsDiv'), rvr_rows);
@@ -1202,18 +1240,16 @@ function rf_reach_render() {
 	rf_reach_band_filter_init();
 	const status_div = document.getElementById('crossReportStatus');
 	const { paths, local_count } = rf_reach_paths_collect();
-	const local_suffix = local_count > 0 ? ` (${local_count} local file${local_count === 1 ? '' : 's'} skipped)` : '';
+	const base_notes = rf_reach_status_notes_collect(local_count, 0);
 
 	if (paths.length === 0) {
 		rf_reach_cached_context = null;
-		status_div.textContent = local_count > 0
-			? `No server-loaded reports. RF Reach requires server-loaded reports.${local_suffix}`
-			: 'No reports loaded. Load server reports to use RF Reach.';
+		rf_reach_status_render(status_div, {}, base_notes);
 		rf_reach_charts_clear('No data');
 		return;
 	}
 
-	status_div.textContent = `Loading ${paths.length} report${paths.length === 1 ? '' : 's'}...${local_suffix}`;
+	rf_reach_status_render(status_div, { reports: paths.length }, base_notes);
 	rf_reach_last_facet_divs = [];
 
 	const url = '/api/rf-reach-data?paths=' + encodeURIComponent(paths.join(','));
@@ -1229,8 +1265,7 @@ function rf_reach_render() {
 			const labeller = rf_reach_model_label_map(normalized);
 			for (const r of normalized) r.model_label = labeller(r);
 
-			const err_suffix = errs.length > 0 ? ` (${errs.length} report${errs.length === 1 ? '' : 's'} skipped)` : '';
-			rf_reach_cached_context = { normalized, paths, local_suffix, err_suffix };
+			rf_reach_cached_context = { normalized, paths, local_count, err_count: errs.length };
 			rf_reach_render_cached();
 
 			if (errs.length > 0) console.warn('rf-reach data errors:', errs);
@@ -1238,7 +1273,7 @@ function rf_reach_render() {
 		.catch(err => {
 			console.error('rf-reach data fetch failed:', err);
 			rf_reach_cached_context = null;
-			status_div.textContent = `Error loading data: ${err.message}`;
+			rf_reach_status_render(status_div, {}, [`error: ${err.message}`, ...base_notes]);
 			rf_reach_charts_clear(`Error: ${err.message}`);
 		});
 }

@@ -241,14 +241,16 @@
 
 			<div class="cross-report-panel" id="crossReportPanel" style="display: none;">
 				<div class="cross-report-header">
-					<h3>RF Reach</h3>
+					<div class="cross-report-header-left">
+						<h3>RF Reach</h3>
+						<div class="cross-report-status-row" id="crossReportStatus"></div>
+					</div>
 					<div class="cross-report-header-right">
+						<button class="btn-small" onclick="rf_reach_render()" title="Re-fetch and re-render all charts">&#x21bb; Refresh</button>
 						<div class="rf-band-filter" aria-label="Band filters">
 							<span class="rf-band-filter-label">Bands</span>
 							<div class="rf-band-filter-options" id="rfReachBandFilters"></div>
 						</div>
-						<span class="cross-report-status" id="crossReportStatus"></span>
-						<button class="btn-small" onclick="rf_reach_render()" title="Re-fetch and re-render all charts">&#x21bb; Refresh</button>
 					</div>
 				</div>
 				<div class="cross-report-beta-banner">
