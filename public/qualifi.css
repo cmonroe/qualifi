@@ -2499,6 +2499,11 @@ footer .version {
 	filter: grayscale(0.7);
 }
 
+.rf-hover-dwell-hidden .hoverlayer {
+	opacity: 0;
+	pointer-events: none;
+}
+
 @media (max-width: 900px) {
 	.cross-report-header {
 		align-items: flex-start;

@@ -97,6 +97,7 @@ function rf_reach_palette() {
 		line: rf_reach_css_var('--border-default', '#333333'),
 		zero_line: rf_reach_css_var('--border-strong', '#525252'),
 		tooltip_bg: rf_reach_css_var('--bg-tooltip', '#1f1f1f'),
+		accent: '#ffffff',
 		danger: rf_reach_css_var('--accent-danger', '#ff3b30'),
 		success: rf_reach_css_var('--accent-success', '#00c896')
 	};
@@ -149,6 +150,114 @@ function rf_reach_layout_base() {
 			font: { color: p.text_primary, family: f, size: 12 }
 		}
 	};
+}
+
+// Plotly fires hover synchronously and gives no built-in dwell or
+// per-point highlight. We layer both on top via plotly_hover/plotly_unhover:
+// the .hoverlayer is hidden via a class on the chart div until a 200ms
+// dwell timer fires, then the tooltip appears together with a per-trace-type
+// highlight (rect for heatmaps, marker outline for bars, marker enlargement
+// for scatterpolar). Re-attach after every Plotly.newPlot - newPlot purges
+// .on() listeners so there is no leak.
+const RF_REACH_HOVER_DWELL_MS = 150;
+const RF_REACH_HOVER_HIDDEN_CLASS = 'rf-hover-dwell-hidden';
+
+function rf_reach_hover_xstep_compute(div) {
+	const data = div.data;
+	if (!data || !data.length || !data[0].x || data[0].x.length < 2) return 5;
+	const step = data[0].x[1] - data[0].x[0];
+	return Number.isFinite(step) && step > 0 ? step : 5;
+}
+
+function rf_reach_hover_target_key(p) {
+	const t = p.data && p.data.type;
+	if (t === 'heatmap') return `h|${p.curveNumber}|${p.pointNumber[0]}|${p.pointNumber[1]}`;
+	if (t === 'bar') return `b|${p.curveNumber}|${p.pointNumber}`;
+	if (t === 'scatterpolar') return `p|${p.curveNumber}|${p.pointIndex}`;
+	return null;
+}
+
+function rf_reach_hover_highlight_apply(div, p, state) {
+	const t = p.data && p.data.type;
+	if (!document.body.contains(div) || typeof Plotly === 'undefined') return;
+	const palette = rf_reach_palette();
+	try {
+		if (t === 'heatmap') {
+			Plotly.relayout(div, { shapes: [{
+				type: 'rect', xref: 'x', yref: 'y',
+				x0: p.x - state.xStep / 2, x1: p.x + state.xStep / 2,
+				y0: p.pointNumber[0] - 0.5, y1: p.pointNumber[0] + 0.5,
+				line: { color: palette.accent, width: 2 },
+				fillcolor: 'rgba(0,0,0,0)', layer: 'above'
+			}]});
+		} else if (t === 'bar') {
+			const n = (p.data.x && p.data.x.length) || 0;
+			const widths = new Array(n).fill(0);
+			if (p.pointNumber >= 0 && p.pointNumber < n) widths[p.pointNumber] = 3;
+			Plotly.restyle(div, {
+				'marker.line.width': [widths],
+				'marker.line.color': [palette.accent]
+			}, [p.curveNumber]);
+		} else if (t === 'scatterpolar') {
+			const n = (p.data.theta && p.data.theta.length) || 0;
+			const sizes = new Array(n).fill(4);
+			if (p.pointIndex >= 0 && p.pointIndex < n) sizes[p.pointIndex] = 10;
+			Plotly.restyle(div, { 'marker.size': [sizes] }, [p.curveNumber]);
+		}
+	} catch (_) { /* plot detached or restyle conflict */ }
+}
+
+function rf_reach_hover_highlight_clear(div, p) {
+	const t = p && p.data && p.data.type;
+	if (!document.body.contains(div) || typeof Plotly === 'undefined') return;
+	try {
+		if (t === 'heatmap') {
+			Plotly.relayout(div, { shapes: [] });
+		} else if (t === 'bar') {
+			Plotly.restyle(div, { 'marker.line.width': [0] }, [p.curveNumber]);
+		} else if (t === 'scatterpolar') {
+			Plotly.restyle(div, { 'marker.size': [4] }, [p.curveNumber]);
+		}
+	} catch (_) { /* plot detached or restyle conflict */ }
+}
+
+function rf_reach_hover_cancel_full(div) {
+	const state = div.__rfHover;
+	if (!state) return;
+	if (state.timer !== null) {
+		clearTimeout(state.timer);
+		state.timer = null;
+	}
+	div.classList.remove(RF_REACH_HOVER_HIDDEN_CLASS);
+	if (state.last_point) rf_reach_hover_highlight_clear(div, state.last_point);
+	state.active = null;
+	state.last_point = null;
+}
+
+function rf_reach_hover_attach(div) {
+	const state = { timer: null, active: null, last_point: null, xStep: rf_reach_hover_xstep_compute(div) };
+	div.__rfHover = state;
+	div.on('plotly_hover', (ev) => {
+		if (!ev || !ev.points || !ev.points.length) return;
+		const p = ev.points[0];
+		const key = rf_reach_hover_target_key(p);
+		if (!key) return;
+		if (state.active === key && state.timer === null) return;
+		if (state.timer !== null) clearTimeout(state.timer);
+		if (state.last_point) rf_reach_hover_highlight_clear(div, state.last_point);
+		state.active = null;
+		state.last_point = null;
+		div.classList.add(RF_REACH_HOVER_HIDDEN_CLASS);
+		state.timer = setTimeout(() => {
+			state.timer = null;
+			div.classList.remove(RF_REACH_HOVER_HIDDEN_CLASS);
+			rf_reach_hover_highlight_apply(div, p, state);
+			state.active = key;
+			state.last_point = p;
+		}, RF_REACH_HOVER_DWELL_MS);
+	});
+	div.on('plotly_unhover', () => rf_reach_hover_cancel_full(div));
+	div.addEventListener('mouseleave', () => rf_reach_hover_cancel_full(div));
 }
 
 function rf_reach_heatmap_height_compute(y_count) {
@@ -518,6 +627,7 @@ function rf_reach_faceted_heatmap_render(container, rows, config) {
 			},
 			yaxis: { ...rf_reach_axis_base(), autorange: 'reversed' }
 		}, { responsive: true, displayModeBar: false });
+		rf_reach_hover_attach(divs[i]);
 	});
 }
 
@@ -636,6 +746,7 @@ function chart_eirp_deviation_render_internal(container, summary, empty_message)
 			},
 			margin: { l: 80, r: 40, t: 56, b: 120 }
 		}, { responsive: true, displayModeBar: false });
+		rf_reach_hover_attach(divs[i]);
 	});
 }
 
@@ -833,6 +944,7 @@ function chart_iphone_bars_rotation_render(container, rows) {
 				ticktext: y_labels
 			}
 		}, { responsive: true, displayModeBar: false });
+		rf_reach_hover_attach(d);
 	}
 }
 
@@ -1047,6 +1159,7 @@ function chart_polar_render(container, polar_rows, azimuth_rows) {
 			})(),
 			margin: { l: 40, r: 40, t: 56, b: 40 }
 		}, { responsive: true, displayModeBar: false });
+		rf_reach_hover_attach(divs[i]);
 	});
 	const legend = rf_reach_polar_legend_create(
 		Array.from(all_products.values()), color_map, trace_index_map
