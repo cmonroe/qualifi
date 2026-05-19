@@ -79,6 +79,24 @@ function number_or_null(value) {
 	return Number.isFinite(num) ? num : null;
 }
 
+// Parses LANforge throughput strings like "2.337 Gbps", "2882.3 Mbps", "0 bps"
+// to a Mbps number. Returns null on blank, NA-style sentinels, or unrecognised
+// shapes. Used by /api/rf-reach-data for Rx-Bps-1m-DL/-UL columns.
+function bps_string_parse(value) {
+	if (value === undefined || value === null) return null;
+	const trimmed = value.toString().trim();
+	if (trimmed === '' || trimmed === 'NA' || trimmed === 'N/A' || trimmed === 'nan' || trimmed === 'NaN') return null;
+	const match = trimmed.match(/^([0-9]+(?:\.[0-9]+)?)\s*(Gbps|Mbps|Kbps|bps)?$/i);
+	if (!match) return null;
+	const num = Number(match[1]);
+	if (!Number.isFinite(num)) return null;
+	const unit = (match[2] || 'bps').toLowerCase();
+	if (unit === 'gbps') return num * 1000;
+	if (unit === 'mbps') return num;
+	if (unit === 'kbps') return num / 1000;
+	return num / 1e6;
+}
+
 function band_classify(frequency_mhz) {
 	if (frequency_mhz === null || frequency_mhz === undefined || !Number.isFinite(frequency_mhz)) return null;
 	if (frequency_mhz >= 2400 && frequency_mhz <= 2500) return '2.4';
@@ -378,6 +396,9 @@ const server = http.createServer((req, res) => {
 			const idx_dir = col('Direction');
 			const idx_chan = col('Channel');
 			const idx_rot = col('Rotation');
+			const idx_bps_1m_dl = col('Rx-Bps-1m-DL');
+			const idx_bps_1m_ul = col('Rx-Bps-1m-UL');
+			const idx_bps_1m = col('Rx-Bps-1m');
 
 			if (idx_rssi === -1 || idx_atten === -1 || idx_freq === -1 || idx_bw === -1 || idx_dir === -1) {
 				errors.push({ path: requested, error: 'missing required columns in text-csv-0.csv' });
@@ -389,6 +410,14 @@ const server = http.createServer((req, res) => {
 				const band = band_classify(frequency_mhz);
 				let rssi = number_or_null(fields[idx_rssi]);
 				if (rssi !== null && rssi >= 0) rssi = null; // sentinel for lost link, matches ingest.py
+				const dl = idx_bps_1m_dl !== -1 ? bps_string_parse(fields[idx_bps_1m_dl]) : null;
+				const ul = idx_bps_1m_ul !== -1 ? bps_string_parse(fields[idx_bps_1m_ul]) : null;
+				let tput_mbps = null;
+				if (dl !== null || ul !== null) {
+					tput_mbps = Math.max(dl !== null ? dl : 0, ul !== null ? ul : 0);
+				} else if (idx_bps_1m !== -1) {
+					tput_mbps = bps_string_parse(fields[idx_bps_1m]);
+				}
 				out_rows.push({
 					vendor,
 					model,
@@ -401,7 +430,8 @@ const server = http.createServer((req, res) => {
 					band,
 					atten_db: number_or_null(fields[idx_atten]),
 					rotation_deg: idx_rot !== -1 ? number_or_null(fields[idx_rot]) : null,
-					rssi_dbm: rssi
+					rssi_dbm: rssi,
+					tput_mbps
 				});
 			}
 		}

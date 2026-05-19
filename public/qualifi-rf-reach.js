@@ -38,7 +38,34 @@ const RF_REACH_BAND_FILTERS = [
 	{ key: '6', label: '6G' }
 ];
 
-const RF_REACH_EIRP_WINDOW = [5, 50];
+// Atten window over which the EIRP-proxy median is taken, per coarse band.
+// Lower bound (5 dB) is roughly where AGC stops saturating across the cohort.
+// Upper bound varies by band because path loss + LPI EIRP caps push 6 GHz
+// into the noise floor far sooner than 5 GHz, which itself reaches noise
+// sooner than 2.4 GHz. Sample chamber sweeps cap at:
+//   2.4 GHz: ~88-90 dB atten
+//   5 GHz:   ~72 dB atten
+//   6 GHz:   ~50-54 dB atten
+// Per-band upper bounds keep all useful linear samples without admitting
+// near-floor RSSI that would bias weaker devices' medians downward.
+const RF_REACH_EIRP_WINDOW_BY_BAND = {
+	'2.4': [5, 75],
+	'5':   [5, 65],
+	'6':   [5, 50]
+};
+
+function rf_reach_eirp_window_for(row) {
+	if (row.band === '2.4') return RF_REACH_EIRP_WINDOW_BY_BAND['2.4'];
+	if (row.band === '5L' || row.band === '5H') return RF_REACH_EIRP_WINDOW_BY_BAND['5'];
+	if (row.band === '6') return RF_REACH_EIRP_WINDOW_BY_BAND['6'];
+	return null;
+}
+
+function rf_reach_eirp_in_window(row) {
+	const win = rf_reach_eirp_window_for(row);
+	if (!win) return false;
+	return row.atten_db >= win[0] && row.atten_db <= win[1];
+}
 
 // iPhone's WiFi status-bar icon has three arcs, so bars range 0..3. Thresholds
 // align with Apple's documented -70 dBm WiFi roaming trigger and standard
@@ -61,6 +88,19 @@ const RF_REACH_RSSI_COLORSCALE = [
 	[1.0, '#a7f3d0']    // ~-20 dBm: pale mint-green
 ];
 const RF_REACH_RSSI_ZRANGE = [-100, -20];
+
+// Throughput colorscale: deliberately different family from the RSSI ramp so
+// the two heatmaps are not visually conflated when rendered side-by-side.
+// Cool dark violet at the floor walks through magenta and amber to bright
+// yellow at the ceiling, matching the "good = bright, hot" convention used
+// by sequential viridis/inferno-family palettes.
+const RF_REACH_TPUT_COLORSCALE = [
+	[0.0,  '#1e1b4b'],   // ~0 Mbps: deep indigo
+	[0.25, '#7e22ce'],   // violet
+	[0.5,  '#db2777'],   // magenta
+	[0.75, '#f59e0b'],   // amber
+	[1.0,  '#fde047']    // bright yellow at ceiling
+];
 
 // Step colorscale: each integer bar value maps to exactly one color block, no
 // gradient between them. Boundaries at 1/6, 3/6, 5/6 are the midpoints between
@@ -174,6 +214,7 @@ function rf_reach_hover_target_key(p) {
 	if (t === 'heatmap') return `h|${p.curveNumber}|${p.pointNumber[0]}|${p.pointNumber[1]}`;
 	if (t === 'bar') return `b|${p.curveNumber}|${p.pointNumber}`;
 	if (t === 'scatterpolar') return `p|${p.curveNumber}|${p.pointIndex}`;
+	if (t === 'scatter') return `s|${p.curveNumber}|${p.pointIndex}`;
 	return null;
 }
 
@@ -200,8 +241,17 @@ function rf_reach_hover_highlight_apply(div, p, state) {
 			}, [p.curveNumber]);
 		} else if (t === 'scatterpolar') {
 			const n = (p.data.theta && p.data.theta.length) || 0;
-			const sizes = new Array(n).fill(4);
-			if (p.pointIndex >= 0 && p.pointIndex < n) sizes[p.pointIndex] = 10;
+			const rest = (p.data.meta && p.data.meta.restingSize) || 4;
+			const hover = (p.data.meta && p.data.meta.hoverSize) || 10;
+			const sizes = new Array(n).fill(rest);
+			if (p.pointIndex >= 0 && p.pointIndex < n) sizes[p.pointIndex] = hover;
+			Plotly.restyle(div, { 'marker.size': [sizes] }, [p.curveNumber]);
+		} else if (t === 'scatter') {
+			const n = (p.data.x && p.data.x.length) || 0;
+			const rest = (p.data.meta && p.data.meta.restingSize) || 4;
+			const hover = (p.data.meta && p.data.meta.hoverSize) || 10;
+			const sizes = new Array(n).fill(rest);
+			if (p.pointIndex >= 0 && p.pointIndex < n) sizes[p.pointIndex] = hover;
 			Plotly.restyle(div, { 'marker.size': [sizes] }, [p.curveNumber]);
 		}
 	} catch (_) { /* plot detached or restyle conflict */ }
@@ -216,7 +266,11 @@ function rf_reach_hover_highlight_clear(div, p) {
 		} else if (t === 'bar') {
 			Plotly.restyle(div, { 'marker.line.width': [0] }, [p.curveNumber]);
 		} else if (t === 'scatterpolar') {
-			Plotly.restyle(div, { 'marker.size': [4] }, [p.curveNumber]);
+			const rest = (p.data.meta && p.data.meta.restingSize) || 4;
+			Plotly.restyle(div, { 'marker.size': [rest] }, [p.curveNumber]);
+		} else if (t === 'scatter') {
+			const rest = (p.data.meta && p.data.meta.restingSize) || 4;
+			Plotly.restyle(div, { 'marker.size': [rest] }, [p.curveNumber]);
 		}
 	} catch (_) { /* plot detached or restyle conflict */ }
 }
@@ -350,8 +404,10 @@ function rf_reach_selected_band_labels() {
 
 function rf_reach_charts_clear(message) {
 	const ids = [
-		'rssiHeatmapDiv', 'iphoneBarsDiv', 'eirpDeviationDiv',
-		'eirpDeviationAzimuthDiv', 'iphoneBarsRotationDiv', 'polarDiv'
+		'rssiHeatmapDiv', 'tputHeatmapDiv', 'iphoneBarsDiv', 'tputVsAttenDiv',
+		'eirpDeviationDiv', 'tputDeviationDiv',
+		'eirpDeviationAzimuthDiv', 'tputDeviationAzimuthDiv',
+		'iphoneBarsRotationDiv', 'polarDiv'
 	];
 	ids.forEach(id => {
 		const el = document.getElementById(id);
@@ -449,6 +505,22 @@ function rf_reach_y_order_by_mean_rssi(rows, label_fn) {
 		.map(o => o.k);
 }
 
+function rf_reach_y_order_by_mean_tput(rows, label_fn) {
+	const sums = new Map();
+	for (const r of rows) {
+		if (r.tput_mbps === null || r.tput_mbps === undefined || Number.isNaN(r.tput_mbps)) continue;
+		const k = label_fn(r);
+		const bucket = sums.get(k) || { sum: 0, n: 0 };
+		bucket.sum += r.tput_mbps;
+		bucket.n += 1;
+		sums.set(k, bucket);
+	}
+	return Array.from(sums.entries())
+		.map(([k, v]) => ({ k, mean: v.sum / v.n }))
+		.sort((a, b) => b.mean - a.mean)
+		.map(o => o.k);
+}
+
 function rf_reach_x_keys_global(rows) {
 	const set = new Set();
 	for (const r of rows) {
@@ -495,30 +567,36 @@ function rf_reach_median(arr) {
 	return sorted.length % 2 ? sorted[mid] : 0.5 * (sorted[mid - 1] + sorted[mid]);
 }
 
-function rf_reach_eirp_summary_finalize(summary) {
+// Generic deviation-from-cohort-median finalisation. Each summary item must
+// carry { unii_band, bw_mhz, value }; the function annotates each item with
+// cohort_value (median of values within the same band/BW facet) and deviation
+// (item.value - cohort_value). The per-product aggregator that produced
+// item.value (median, mean, ...) is decided by the caller; the cohort
+// baseline always uses median for robustness against outlier products.
+function rf_reach_deviation_summary_finalize(summary) {
 	const cohort_keyed = new Map();
 	for (const s of summary) {
 		const fk = `${s.unii_band}|${s.bw_mhz}`;
 		if (!cohort_keyed.has(fk)) cohort_keyed.set(fk, []);
-		cohort_keyed.get(fk).push(s.median);
+		cohort_keyed.get(fk).push(s.value);
 	}
 	const cohort_median = new Map();
 	for (const [fk, arr] of cohort_keyed.entries()) cohort_median.set(fk, rf_reach_median(arr));
 	for (const s of summary) {
-		s.all_median = cohort_median.get(`${s.unii_band}|${s.bw_mhz}`);
-		s.deviation_db = s.median - s.all_median;
+		s.cohort_value = cohort_median.get(`${s.unii_band}|${s.bw_mhz}`);
+		s.deviation = s.value - s.cohort_value;
 	}
 	return summary;
 }
 
 // Boresight EIRP-proxy: each (product, atten) cell has a single RSSI sample.
-// Median EIRP = RSSI + Atten across atten steps in the [5, 50] dB window.
-// DFS bands are excluded, see metrics.py rationale.
+// Median EIRP = RSSI + Atten across atten steps in the per-band window
+// (RF_REACH_EIRP_WINDOW_BY_BAND). DFS bands are excluded, see metrics.py
+// rationale.
 function rf_reach_eirp_deviation_compute(rows) {
 	const windowed = rows.filter(r =>
-		r.atten_db >= RF_REACH_EIRP_WINDOW[0]
-		&& r.atten_db <= RF_REACH_EIRP_WINDOW[1]
-		&& !RF_REACH_DFS_UNII.has(r.unii_band)
+		!RF_REACH_DFS_UNII.has(r.unii_band)
+		&& rf_reach_eirp_in_window(r)
 	);
 	const groups = new Map();
 	for (const r of windowed) {
@@ -534,20 +612,20 @@ function rf_reach_eirp_deviation_compute(rows) {
 	const summary = [];
 	for (const g of groups.values()) {
 		if (g.values.length === 0) continue;
-		summary.push({ ...g, median: rf_reach_median(g.values) });
+		summary.push({ ...g, value: rf_reach_median(g.values) });
 	}
-	return rf_reach_eirp_summary_finalize(summary);
+	return rf_reach_deviation_summary_finalize(summary);
 }
 
 // Azimuth-averaged EIRP-proxy: per (product, atten) cell, mean RSSI across all
 // rotation samples first, then EIRP = mean_RSSI + atten, then median across
-// atten steps in [5, 50] dB. Captures the EIRP an arbitrarily-oriented client
-// would see on average. DFS still excluded.
+// atten steps in the per-band window (RF_REACH_EIRP_WINDOW_BY_BAND). Captures
+// the EIRP an arbitrarily-oriented client would see on average. DFS still
+// excluded.
 function rf_reach_eirp_deviation_azimuth_compute(rows) {
 	const windowed = rows.filter(r =>
-		r.atten_db >= RF_REACH_EIRP_WINDOW[0]
-		&& r.atten_db <= RF_REACH_EIRP_WINDOW[1]
-		&& !RF_REACH_DFS_UNII.has(r.unii_band)
+		!RF_REACH_DFS_UNII.has(r.unii_band)
+		&& rf_reach_eirp_in_window(r)
 	);
 	const cells = new Map();
 	for (const r of windowed) {
@@ -575,9 +653,79 @@ function rf_reach_eirp_deviation_azimuth_compute(rows) {
 	const summary = [];
 	for (const g of groups.values()) {
 		if (g.values.length === 0) continue;
-		summary.push({ ...g, median: rf_reach_median(g.values) });
+		summary.push({ ...g, value: rf_reach_median(g.values) });
 	}
-	return rf_reach_eirp_summary_finalize(summary);
+	return rf_reach_deviation_summary_finalize(summary);
+}
+
+// Boresight throughput deviation: same per-band atten window and DFS exclusion
+// as the EIRP chart so the two are directly comparable. Per (vendor, model,
+// unii_band, bw_mhz), median throughput across atten steps in window. Cohort
+// median = median of those per-product medians inside each (band, BW) facet.
+// Deviation = product median minus cohort median, in Mbps.
+function rf_reach_tput_deviation_compute(rows) {
+	const windowed = rows.filter(r =>
+		!RF_REACH_DFS_UNII.has(r.unii_band)
+		&& rf_reach_eirp_in_window(r)
+		&& r.tput_mbps !== null && r.tput_mbps !== undefined && Number.isFinite(r.tput_mbps)
+	);
+	const groups = new Map();
+	for (const r of windowed) {
+		const key = `${r.vendor}|${r.model}|${r.unii_band}|${r.bandwidth_mhz}`;
+		const bucket = groups.get(key) || {
+			vendor: r.vendor, model: r.model, model_label: r.model_label,
+			unii_band: r.unii_band, bw_mhz: r.bandwidth_mhz, values: []
+		};
+		bucket.values.push(r.tput_mbps);
+		groups.set(key, bucket);
+	}
+	const summary = [];
+	for (const g of groups.values()) {
+		if (g.values.length === 0) continue;
+		summary.push({ ...g, value: rf_reach_median(g.values) });
+	}
+	return rf_reach_deviation_summary_finalize(summary);
+}
+
+// Azimuth-averaged throughput deviation: per (product, atten) cell, mean
+// throughput across all rotation samples first, then median across atten steps
+// in window. Captures the throughput an arbitrarily-oriented client sees on
+// average. Same DFS exclusion and per-band atten window as the EIRP variant.
+function rf_reach_tput_deviation_azimuth_compute(rows) {
+	const windowed = rows.filter(r =>
+		!RF_REACH_DFS_UNII.has(r.unii_band)
+		&& rf_reach_eirp_in_window(r)
+		&& r.tput_mbps !== null && r.tput_mbps !== undefined && Number.isFinite(r.tput_mbps)
+	);
+	const cells = new Map();
+	for (const r of windowed) {
+		const key = `${r.vendor}|${r.model}|${r.unii_band}|${r.bandwidth_mhz}|${r.atten_db}`;
+		const bucket = cells.get(key) || {
+			vendor: r.vendor, model: r.model, model_label: r.model_label,
+			unii_band: r.unii_band, bw_mhz: r.bandwidth_mhz, atten_db: r.atten_db,
+			sum: 0, n: 0
+		};
+		bucket.sum += r.tput_mbps;
+		bucket.n += 1;
+		cells.set(key, bucket);
+	}
+	const groups = new Map();
+	for (const c of cells.values()) {
+		const mean_tput = c.sum / c.n;
+		const key = `${c.vendor}|${c.model}|${c.unii_band}|${c.bw_mhz}`;
+		const g = groups.get(key) || {
+			vendor: c.vendor, model: c.model, model_label: c.model_label,
+			unii_band: c.unii_band, bw_mhz: c.bw_mhz, values: []
+		};
+		g.values.push(mean_tput);
+		groups.set(key, g);
+	}
+	const summary = [];
+	for (const g of groups.values()) {
+		if (g.values.length === 0) continue;
+		summary.push({ ...g, value: rf_reach_median(g.values) });
+	}
+	return rf_reach_deviation_summary_finalize(summary);
 }
 
 function rf_reach_faceted_heatmap_render(container, rows, config) {
@@ -597,18 +745,22 @@ function rf_reach_faceted_heatmap_render(container, rows, config) {
 	const global_x_keys = rf_reach_x_keys_global(rows);
 	const x_range = global_x_keys.length ? [global_x_keys[0], global_x_keys[global_x_keys.length - 1]] : null;
 	const layout_overrides = config.layout || {};
+	const value_fn = config.value_fn || (r => r.rssi_dbm);
+	const y_order_fn = config.y_order_fn || rf_reach_y_order_by_mean_rssi;
 	facets.forEach((facet, i) => {
-		const order = rf_reach_y_order_by_mean_rssi(facet.rows, r => r.model_label);
-		const pivot = rf_reach_pivot_mean(facet.rows, r => r.rssi_dbm);
+		const order = y_order_fn(facet.rows, r => r.model_label);
+		const pivot = rf_reach_pivot_mean(facet.rows, value_fn);
 		const y_keys_ordered = order.filter(k => pivot.y_keys.includes(k));
 		const z_raw = rf_reach_z_matrix_build(y_keys_ordered, global_x_keys, pivot.cells);
 		const z = config.z_transform ? z_raw.map(row => row.map(config.z_transform)) : z_raw;
+		const trace_facet_overrides = config.trace_facet_fn ? config.trace_facet_fn(facet, pivot) : {};
 		Plotly.newPlot(divs[i], [{
 			type: 'heatmap',
 			z,
 			x: global_x_keys,
 			y: y_keys_ordered,
-			...config.trace
+			...config.trace,
+			...trace_facet_overrides
 		}], {
 			...rf_reach_layout_base(),
 			...layout_overrides,
@@ -682,11 +834,154 @@ function chart_iphone_bars_render(container, rows) {
 	});
 }
 
-function chart_eirp_deviation_render_internal(container, summary, empty_message) {
-	if (summary.length === 0) {
-		container.innerHTML = `<div class="cross-report-empty">${empty_message}</div>`;
+// Throughput peak observed in the loaded cohort, ceiled to a clean 100 Mbps
+// step so the colorbar range stays visually round. Per-render so heatmap and
+// scatter scale to whatever bands are currently visible after filtering.
+function rf_reach_tput_zmax_compute(rows) {
+	let m = 0;
+	for (const r of rows) {
+		if (r.tput_mbps !== null && r.tput_mbps !== undefined && Number.isFinite(r.tput_mbps) && r.tput_mbps > m) {
+			m = r.tput_mbps;
+		}
+	}
+	if (m <= 0) return 100;
+	return Math.ceil(m / 100) * 100;
+}
+
+function chart_tput_heatmap_render(container, rows) {
+	const p = rf_reach_palette();
+	const f = rf_reach_mono_font();
+	rf_reach_faceted_heatmap_render(container, rows, {
+		value_fn: r => r.tput_mbps,
+		y_order_fn: rf_reach_y_order_by_mean_tput,
+		trace: {
+			colorscale: RF_REACH_TPUT_COLORSCALE,
+			zmin: 0,
+			colorbar: {
+				...rf_reach_colorbar_base(),
+				title: { text: 'Mbps', side: 'right', font: { color: p.text_tertiary, family: f, size: 11 } }
+			},
+			hovertemplate: '<b>%{y}</b><br>atten %{x:.0f} dB<br>%{z:.0f} Mbps<extra></extra>'
+		},
+		trace_facet_fn: (facet) => ({ zmax: rf_reach_tput_zmax_compute(facet.rows) })
+	});
+}
+
+// Throughput vs attenuation. Per (unii_band, bw_mhz) facet, one trace per
+// model walking left-to-right through the atten sweep: X = atten dB, Y = mean
+// throughput at that step. Plotting against atten (the controlled variable)
+// rather than measured RSSI lets users compare devices at identical link-
+// budget conditions; differences in EIRP show up as horizontal offsets of
+// the same shape.
+function chart_tput_vs_atten_render(container, rows) {
+	const facets = rf_reach_facets_collect(rows);
+	const non_empty = facets.filter(f => f.rows.some(r => r.tput_mbps !== null && r.tput_mbps !== undefined));
+	if (non_empty.length === 0) {
+		container.innerHTML = '<div class="cross-report-empty">No throughput data in loaded reports</div>';
 		return;
 	}
+	const all_models = new Set();
+	for (const f of non_empty) for (const r of f.rows) all_models.add(r.model_label);
+	const color_map = rf_reach_polar_color_map(
+		Array.from(all_models).map(label => ({ label }))
+	);
+	const divs = rf_reach_facet_grid_make(container, non_empty.length, 560, 1);
+	rf_reach_last_facet_divs = rf_reach_last_facet_divs.concat(divs);
+	non_empty.forEach((facet, i) => {
+		const facet_zmax = rf_reach_tput_zmax_compute(facet.rows);
+		const cells = new Map();
+		for (const r of facet.rows) {
+			if (r.atten_db === null || r.atten_db === undefined) continue;
+			if (r.tput_mbps === null || r.tput_mbps === undefined || Number.isNaN(r.tput_mbps)) continue;
+			if (r.rssi_dbm === null || r.rssi_dbm === undefined) continue;
+			const key = `${r.model_label}|${r.atten_db}`;
+			const bucket = cells.get(key) || {
+				model_label: r.model_label, atten_db: r.atten_db,
+				rssi_sum: 0, tput_sum: 0, n: 0
+			};
+			bucket.rssi_sum += r.rssi_dbm;
+			bucket.tput_sum += r.tput_mbps;
+			bucket.n += 1;
+			cells.set(key, bucket);
+		}
+		const per_model = new Map();
+		for (const c of cells.values()) {
+			if (!per_model.has(c.model_label)) per_model.set(c.model_label, []);
+			per_model.get(c.model_label).push({
+				atten: c.atten_db,
+				rssi: c.rssi_sum / c.n,
+				tput: c.tput_sum / c.n
+			});
+		}
+		const traces = [];
+		for (const [label, points] of per_model.entries()) {
+			points.sort((a, b) => a.atten - b.atten);
+			if (points.length === 0) continue;
+			const color = color_map.get(label) || '#94a3b8';
+			traces.push({
+				type: 'scatter',
+				mode: 'lines+markers',
+				x: points.map(p => p.atten),
+				y: points.map(p => p.tput),
+				customdata: points.map(p => [p.rssi]),
+				name: label,
+				line: { color, width: 1.5 },
+				marker: { color, size: 4 },
+				hovertemplate: `<b>${label}</b><br>atten %{x:.0f} dB<br>RSSI %{customdata[0]:.1f} dBm<br>%{y:.0f} Mbps<extra></extra>`,
+				showlegend: true
+			});
+		}
+		Plotly.newPlot(divs[i], traces, {
+			...rf_reach_layout_base(),
+			hovermode: 'closest',
+			title: {
+				text: rf_reach_facet_label(facet.unii_band, facet.bw_mhz),
+				font: rf_reach_title_font(),
+				x: 0.02, xanchor: 'left', y: 0.97
+			},
+			xaxis: {
+				...rf_reach_axis_base(),
+				title: { text: 'attenuation (dB)', font: { color: rf_reach_palette().text_tertiary, family: rf_reach_mono_font(), size: 11 } },
+				dtick: 5
+			},
+			yaxis: {
+				...rf_reach_axis_base(),
+				title: { text: 'throughput (Mbps)', font: { color: rf_reach_palette().text_tertiary, family: rf_reach_mono_font(), size: 11 } },
+				rangemode: 'tozero',
+				range: [0, facet_zmax]
+			},
+			legend: {
+				font: { color: rf_reach_palette().text_secondary, family: rf_reach_mono_font(), size: 10 },
+				bgcolor: 'transparent',
+				orientation: 'h',
+				y: -0.25
+			},
+			margin: { l: 70, r: 24, t: 56, b: 100 }
+		}, { responsive: true, displayModeBar: false });
+		rf_reach_hover_attach(divs[i]);
+	});
+}
+
+// Generic per-facet deviation bar chart. Each summary item must carry
+// { model_label, unii_band, bw_mhz, deviation, cohort_value }. opts:
+//   empty_message  shown when summary is empty
+//   unit           string for axis title and hover ('dB', 'Mbps', ...)
+//   decimals       number of digits for the bar label and hover deviation
+//   cohort_decimals  digits for cohort-median in title and hover (defaults
+//                    to decimals)
+//   overlay        optional secondary metric drawn as scatter markers on a
+//                  right-side Y axis, indexed by model_label per facet:
+//                    { summary, unit, decimals, color, name }
+//                  summary items use the same { model_label, unii_band,
+//                  bw_mhz, median } shape; the median value is plotted.
+function chart_deviation_bar_render(container, summary, opts) {
+	if (summary.length === 0) {
+		container.innerHTML = `<div class="cross-report-empty">${opts.empty_message}</div>`;
+		return;
+	}
+	const unit = opts.unit;
+	const dec = opts.decimals;
+	const cohort_dec = opts.cohort_decimals !== undefined ? opts.cohort_decimals : dec;
 	const facet_groups = new Map();
 	for (const s of summary) {
 		const fk = `${s.unii_band}|${s.bw_mhz}`;
@@ -697,17 +992,25 @@ function chart_eirp_deviation_render_internal(container, summary, empty_message)
 		.sort((a, b) => rf_reach_facet_sort_key(a.unii_band, a.bw_mhz) - rf_reach_facet_sort_key(b.unii_band, b.bw_mhz));
 	const divs = rf_reach_facet_grid_make(container, facets.length, 420);
 	rf_reach_last_facet_divs = rf_reach_last_facet_divs.concat(divs);
+	const overlay_by_facet = new Map();
+	if (opts.overlay) {
+		for (const o of opts.overlay.summary) {
+			const fk = `${o.unii_band}|${o.bw_mhz}`;
+			if (!overlay_by_facet.has(fk)) overlay_by_facet.set(fk, new Map());
+			overlay_by_facet.get(fk).set(o.model_label, o.value);
+		}
+	}
 	facets.forEach((facet, i) => {
-		const sorted = [...facet.items].sort((a, b) => a.deviation_db - b.deviation_db);
-		const colors = sorted.map(s => s.deviation_db < 0 ? '#ef4444' : '#22c55e');
-		const text_labels = sorted.map(s => `${s.deviation_db >= 0 ? '+' : ''}${s.deviation_db.toFixed(1)}`);
-		const cohort_med = sorted[0].all_median;
-		const max_abs = Math.max(1.0, ...sorted.map(s => Math.abs(s.deviation_db)));
+		const sorted = [...facet.items].sort((a, b) => a.deviation - b.deviation);
+		const colors = sorted.map(s => s.deviation < 0 ? '#ef4444' : '#22c55e');
+		const text_labels = sorted.map(s => `${s.deviation >= 0 ? '+' : ''}${s.deviation.toFixed(dec)}`);
+		const cohort_val = sorted[0].cohort_value;
+		const max_abs = Math.max(1.0, ...sorted.map(s => Math.abs(s.deviation)));
 		const y_pad = max_abs * 0.30;
-		Plotly.newPlot(divs[i], [{
+		const traces = [{
 			type: 'bar',
 			x: sorted.map(s => s.model_label),
-			y: sorted.map(s => s.deviation_db),
+			y: sorted.map(s => s.deviation),
 			marker: {
 				color: colors,
 				cornerradius: 6,
@@ -717,13 +1020,63 @@ function chart_eirp_deviation_render_internal(container, summary, empty_message)
 			textposition: 'outside',
 			textfont: { color: rf_reach_palette().text_primary, size: 12, family: rf_reach_mono_font() },
 			cliponaxis: false,
-			hovertemplate: '<b>%{x}</b><br>deviation: %{y:.2f} dB<br>cohort median: ' + cohort_med.toFixed(1) + ' dB<extra></extra>',
-			showlegend: false
-		}], {
+			hovertemplate: `<b>%{x}</b><br>deviation: %{y:.${dec}f} ${unit}<br>cohort median: ${cohort_val.toFixed(cohort_dec)} ${unit}<extra></extra>`,
+			showlegend: false,
+			name: opts.primary_name || 'deviation'
+		}];
+		const fk = `${facet.unii_band}|${facet.bw_mhz}`;
+		const overlay_map = overlay_by_facet.get(fk);
+		let title_overlay_part = '';
+		const layout_overlay_axis = {};
+		if (opts.overlay && overlay_map && overlay_map.size > 0) {
+			const ov_unit = opts.overlay.unit;
+			const ov_dec = opts.overlay.decimals;
+			const ov_color = opts.overlay.color;
+			const ov_x = sorted.map(s => s.model_label);
+			const ov_y = sorted.map(s => {
+				const v = overlay_map.get(s.model_label);
+				return v === undefined ? null : v;
+			});
+			const ov_values = ov_y.filter(v => v !== null && Number.isFinite(v));
+			if (ov_values.length > 0) {
+				const ov_med = rf_reach_median(ov_values);
+				const ov_max = Math.max(...ov_values);
+				traces.push({
+					type: 'scatter',
+					mode: 'markers',
+					x: ov_x,
+					y: ov_y,
+					yaxis: 'y2',
+					marker: {
+						color: ov_color,
+						size: 11,
+						symbol: 'diamond',
+						line: { color: rf_reach_palette().tooltip_bg, width: 1.5 }
+					},
+					meta: { restingSize: 11, hoverSize: 16 },
+					hovertemplate: `<b>%{x}</b><br>${opts.overlay.name}: %{y:.${ov_dec}f} ${ov_unit}<extra></extra>`,
+					name: opts.overlay.name,
+					showlegend: false
+				});
+				title_overlay_part = `, ${opts.overlay.name} median = ${ov_med.toFixed(ov_dec)} ${ov_unit}`;
+				layout_overlay_axis.yaxis2 = {
+					...rf_reach_axis_base(),
+					title: { text: `${opts.overlay.name} (${ov_unit})`, font: { color: ov_color, family: rf_reach_mono_font(), size: 11 } },
+					tickfont: { color: ov_color, family: rf_reach_mono_font(), size: 11 },
+					overlaying: 'y',
+					side: 'right',
+					rangemode: 'tozero',
+					range: [0, Math.ceil(ov_max * 1.15 / 100) * 100],
+					showgrid: false,
+					zeroline: false
+				};
+			}
+		}
+		Plotly.newPlot(divs[i], traces, {
 			...rf_reach_layout_base(),
 			hovermode: 'closest',
 			title: {
-				text: `${rf_reach_facet_label(facet.unii_band, facet.bw_mhz)}  (cohort median = ${cohort_med.toFixed(1)} dB)`,
+				text: `${rf_reach_facet_label(facet.unii_band, facet.bw_mhz)}  (cohort median = ${cohort_val.toFixed(cohort_dec)} ${unit}${title_overlay_part})`,
 				font: rf_reach_title_font(),
 				x: 0.02,
 				xanchor: 'left',
@@ -737,32 +1090,81 @@ function chart_eirp_deviation_render_internal(container, summary, empty_message)
 			},
 			yaxis: {
 				...rf_reach_axis_base(),
-				title: { text: 'deviation from cohort median (dB)', font: { color: rf_reach_palette().text_tertiary, family: rf_reach_mono_font(), size: 11 } },
+				title: { text: `deviation from cohort median (${unit})`, font: { color: rf_reach_palette().text_tertiary, family: rf_reach_mono_font(), size: 11 } },
 				zeroline: true,
 				zerolinewidth: 1,
 				zerolinecolor: rf_reach_palette().zero_line,
 				griddash: 'dot',
 				range: [-(max_abs + y_pad), max_abs + y_pad]
 			},
-			margin: { l: 80, r: 40, t: 56, b: 120 }
+			...layout_overlay_axis,
+			margin: { l: 80, r: layout_overlay_axis.yaxis2 ? 80 : 40, t: 56, b: 120 }
 		}, { responsive: true, displayModeBar: false });
 		rf_reach_hover_attach(divs[i]);
 	});
 }
 
 function chart_eirp_deviation_render(container, rows) {
-	chart_eirp_deviation_render_internal(
+	chart_deviation_bar_render(
 		container,
 		rf_reach_eirp_deviation_compute(rows),
-		'No data in [5, 50] dB attenuation window (DFS bands excluded)'
+		{
+			empty_message: 'No data in per-band atten window (2.4: 5-75, 5: 5-65, 6: 5-50 dB; DFS excluded)',
+			unit: 'dB',
+			decimals: 2,
+			cohort_decimals: 1,
+			overlay: {
+				summary: rf_reach_tput_deviation_compute(rows),
+				unit: 'Mbps',
+				decimals: 0,
+				color: '#fbbf24',
+				name: 'throughput'
+			}
+		}
 	);
 }
 
 function chart_eirp_deviation_azimuth_render(container, rows) {
-	chart_eirp_deviation_render_internal(
+	chart_deviation_bar_render(
 		container,
 		rf_reach_eirp_deviation_azimuth_compute(rows),
-		'No 360deg_tx rotation-sweep data in [5, 50] dB (DFS bands excluded)'
+		{
+			empty_message: 'No 360deg_tx rotation-sweep data in per-band atten window (DFS excluded)',
+			unit: 'dB',
+			decimals: 2,
+			cohort_decimals: 1,
+			overlay: {
+				summary: rf_reach_tput_deviation_azimuth_compute(rows),
+				unit: 'Mbps',
+				decimals: 0,
+				color: '#fbbf24',
+				name: 'throughput'
+			}
+		}
+	);
+}
+
+function chart_tput_deviation_render(container, rows) {
+	chart_deviation_bar_render(
+		container,
+		rf_reach_tput_deviation_compute(rows),
+		{
+			empty_message: 'No throughput data in per-band atten window (2.4: 5-75, 5: 5-65, 6: 5-50 dB; DFS excluded)',
+			unit: 'Mbps',
+			decimals: 0
+		}
+	);
+}
+
+function chart_tput_deviation_azimuth_render(container, rows) {
+	chart_deviation_bar_render(
+		container,
+		rf_reach_tput_deviation_azimuth_compute(rows),
+		{
+			empty_message: 'No 360deg_tx rotation-sweep throughput in per-band atten window (DFS excluded)',
+			unit: 'Mbps',
+			decimals: 0
+		}
 	);
 }
 
@@ -1229,9 +1631,13 @@ function rf_reach_render_cached() {
 	}, notes);
 
 	chart_rssi_heatmap_render(document.getElementById('rssiHeatmapDiv'), rvr_rows);
+	chart_tput_heatmap_render(document.getElementById('tputHeatmapDiv'), rvr_rows);
 	chart_iphone_bars_render(document.getElementById('iphoneBarsDiv'), rvr_rows);
+	chart_tput_vs_atten_render(document.getElementById('tputVsAttenDiv'), rvr_rows);
 	chart_eirp_deviation_render(document.getElementById('eirpDeviationDiv'), rvr_rows);
+	chart_tput_deviation_render(document.getElementById('tputDeviationDiv'), rvr_rows);
 	chart_eirp_deviation_azimuth_render(document.getElementById('eirpDeviationAzimuthDiv'), azimuth_rows);
+	chart_tput_deviation_azimuth_render(document.getElementById('tputDeviationAzimuthDiv'), azimuth_rows);
 	chart_iphone_bars_rotation_render(document.getElementById('iphoneBarsRotationDiv'), azimuth_rows);
 	chart_polar_render(document.getElementById('polarDiv'), polar_rows, azimuth_rows);
 }
