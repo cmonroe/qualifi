@@ -1658,7 +1658,7 @@ function rf_reach_render() {
 	rf_reach_status_render(status_div, { reports: paths.length }, base_notes);
 	rf_reach_last_facet_divs = [];
 
-	const url = '/api/rf-reach-data?paths=' + encodeURIComponent(paths.join(','));
+	const url = window.QUALIFI_BASE + 'api/rf-reach-data?paths=' + encodeURIComponent(paths.join(','));
 	fetch(url)
 		.then(r => {
 			if (!r.ok) throw new Error(`HTTP ${r.status}`);

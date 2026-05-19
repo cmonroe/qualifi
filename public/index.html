@@ -4,6 +4,22 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>QualiFi</title>
+	<script>
+		// Computed once, before any other script. Lets the app work both at the
+		// document root (local dev) and under an nginx subpath like /qualifi/
+		// without rebuild or env config. Every fetch and asset URL in the JS
+		// bundles prefixes itself with window.QUALIFI_BASE.
+		window.QUALIFI_BASE = (function () {
+			var p = window.location.pathname;
+			var slash = p.lastIndexOf('/');
+			if (slash >= 0 && p.length > slash + 1 && p.indexOf('.', slash) !== -1) {
+				p = p.substring(0, slash + 1);
+			} else if (!p.endsWith('/')) {
+				p += '/';
+			}
+			return p;
+		})();
+	</script>
 	<link rel="icon" type="image/png" href="logo.png">
 	<link rel="apple-touch-icon" href="logo.png">
 	<link rel="stylesheet" href="qualifi.css">

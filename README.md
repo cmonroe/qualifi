@@ -352,3 +352,32 @@ Images are optional but enhance the visual experience. Missing images are handle
 - Berkeley Mono loads if available, falls back to Poppins
 - Google Fonts loads automatically for Poppins fallback
 - Check browser console for font loading messages
+
+## Deploying Behind nginx
+
+QualiFi works both at the document root (local dev on `http://localhost:3000/`) and under an nginx subpath like `http://sos.adtran.com/qualifi/` with no rebuild or config change. The client auto-detects its mount point: an inline bootstrap in `index.html` computes `window.QUALIFI_BASE` from `window.location.pathname` (always ending in `/`), and every fetch and asset URL in the JS bundles prefixes itself with it. The Node server stays path-agnostic; nginx strips the prefix before proxying.
+
+Reference nginx config for deployment at `/qualifi/`:
+
+```nginx
+# Redirect missing trailing slash so QUALIFI_BASE detection lands on '/qualifi/'.
+location = /qualifi {
+    return 301 /qualifi/;
+}
+
+location /qualifi/ {
+    # Trailing '/' on proxy_pass strips the '/qualifi/' prefix from the forwarded URI.
+    # Without it the upstream sees '/qualifi/api/reports' and returns 404.
+    proxy_pass http://127.0.0.1:3000/;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Excel/PDF responses can be large; let them stream.
+    proxy_buffering off;
+    client_max_body_size 0;
+}
+```
+
+To verify behind the proxy, open DevTools and confirm `window.QUALIFI_BASE === '/qualifi/'` and that requests in the Network tab go to `/qualifi/api/...` and `/qualifi/reports/...` returning 200.

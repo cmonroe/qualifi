@@ -68,7 +68,7 @@ function count_model_files(model_data) {
 
 async function load_server_reports() {
 	try {
-		const response = await fetch('/api/reports');
+		const response = await fetch(window.QUALIFI_BASE + 'api/reports');
 		if (!response.ok) {
 			throw new Error(`HTTP error! status: ${response.status}`);
 		}
@@ -94,7 +94,7 @@ async function search_reports(query) {
 	}
 
 	try {
-		const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+		const response = await fetch(`${window.QUALIFI_BASE}api/search?q=${encodeURIComponent(query)}`);
 		const results = await response.json();
 		render_search_results(results);
 	} catch (error) {
@@ -158,7 +158,7 @@ async function load_selected_reports() {
 				console.log(`Loading test config: ${test_config}`, test_config_data);
 
 				try {
-					const response = await fetch(`/reports/${test_config_data.path}`);
+					const response = await fetch(`${window.QUALIFI_BASE}reports/${test_config_data.path}`);
 					if (!response.ok) {
 						console.error(`Failed to fetch ${test_config_data.path}: ${response.status}`);
 						continue;

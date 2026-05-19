@@ -8,7 +8,7 @@ function create_image_element(src, className, alt = '') {
 		this.style.display = 'none';
 	};
 
-	img.src = `/reports/${src}`;
+	img.src = `${window.QUALIFI_BASE}reports/${src}`;
 	return img;
 }
 
@@ -103,7 +103,7 @@ function render_report_browser(data) {
 			<div class="vendor-group">
 				<div class="vendor-header" onclick="toggle_vendor('${vendor_id}')">
 					<span class="toggle-icon">▶</span>
-					${vendor_data.logo ? `<img src="/reports/${vendor_data.logo}" class="vendor-logo" alt="${vendor} logo" onerror="this.style.display='none'">` : ''}
+					${vendor_data.logo ? `<img src="${window.QUALIFI_BASE}reports/${vendor_data.logo}" class="vendor-logo" alt="${vendor} logo" onerror="this.style.display='none'">` : ''}
 					<span style="flex: 1;">${vendor}</span>
 					<span class="file-count">${count_vendor_test_configs(vendor_data)} test configs</span>
 				</div>
@@ -116,7 +116,7 @@ function render_report_browser(data) {
 				<div class="model-group">
 					<div class="model-header" onclick="toggle_model('${model_id}')">
 						<span class="toggle-icon">▶</span>
-						${model_data.image ? `<img src="/reports/${model_data.image}" class="model-image" alt="${model} device" onerror="this.style.display='none'">` : ''}
+						${model_data.image ? `<img src="${window.QUALIFI_BASE}reports/${model_data.image}" class="model-image" alt="${model} device" onerror="this.style.display='none'">` : ''}
 						<span style="flex: 1;">${model}</span>
 						<span class="file-count">${count_model_test_configs(model_data)} test configs</span>
 					</div>
@@ -184,8 +184,8 @@ function render_search_results(results) {
 					   ${selected_server_reports.has(report_id) ? 'checked' : ''}
 					   onchange="toggle_report_selection('${report_id}')">
 				<div class="search-result-images">
-					${result.vendor_logo ? `<img src="/reports/${result.vendor_logo}" class="search-vendor-logo" alt="${result.vendor} logo" onerror="this.style.display='none'">` : ''}
-					${result.model_image ? `<img src="/reports/${result.model_image}" class="search-model-image" alt="${result.model} device" onerror="this.style.display='none'">` : ''}
+					${result.vendor_logo ? `<img src="${window.QUALIFI_BASE}reports/${result.vendor_logo}" class="search-vendor-logo" alt="${result.vendor} logo" onerror="this.style.display='none'">` : ''}
+					${result.model_image ? `<img src="${window.QUALIFI_BASE}reports/${result.model_image}" class="search-model-image" alt="${result.model} device" onerror="this.style.display='none'">` : ''}
 				</div>
 				<div class="version-info" style="flex-direction: column; align-items: flex-start;">
 					<div><strong>${result.vendor} ${result.model}</strong> v${result.version}</div>
@@ -251,7 +251,7 @@ async function toggle_report_selection(report_id) {
 
 		for (const [test_config, test_config_data] of Object.entries(version_data.test_configs)) {
 			try {
-				const response = await fetch(`/reports/${test_config_data.path}`);
+				const response = await fetch(`${window.QUALIFI_BASE}reports/${test_config_data.path}`);
 				if (!response.ok) {
 					console.error(`Failed to fetch ${test_config_data.path}: ${response.status}`);
 					continue;
@@ -848,9 +848,9 @@ function createTestTable(tests, deviceName, startIndex) {
 		if (test.from_server && test.server_path) {
 			const server_path = test.server_path;
 
-			const excelPath = `/reports/${server_path}`;
+			const excelPath = `${window.QUALIFI_BASE}reports/${server_path}`;
 
-			const pdfPath = `/api/pdf/${server_path}`;
+			const pdfPath = `${window.QUALIFI_BASE}api/pdf/${server_path}`;
 
 			fileCell.innerHTML = `
 				<a href="${excelPath}" download title="Download Excel Report" style="margin-right: 8px; color: #00a0c8; text-decoration: none;">
