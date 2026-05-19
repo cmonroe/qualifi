@@ -365,7 +365,10 @@ location = /qualifi {
     return 301 /qualifi/;
 }
 
-location /qualifi/ {
+# '^~' makes this a preferential prefix so it beats any regex 'location' blocks
+# elsewhere in the server (e.g. a 'location ~* \.(css|js|...)$' static-asset
+# handler will otherwise win and bypass the proxy for CSS/JS/fonts/images).
+location ^~ /qualifi/ {
     # Trailing '/' on proxy_pass strips the '/qualifi/' prefix from the forwarded URI.
     # Without it the upstream sees '/qualifi/api/reports' and returns 404.
     proxy_pass http://127.0.0.1:3000/;
