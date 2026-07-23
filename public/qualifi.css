@@ -2239,6 +2239,17 @@ footer .version {
 	opacity: 0.65;
 }
 
+/* DFS band chips: dashed border marks "filtered here, but always excluded
+   from the deviation math" so the two meanings are not conflated. */
+.rf-band-filter-chip.rf-chip-dfs {
+	border-style: dashed;
+}
+
+.rf-band-filter-chip.rf-chip-dfs.active {
+	border-style: dashed;
+	border-color: var(--bg-primary);
+}
+
 .cross-report-status-row {
 	display: flex;
 	align-items: center;

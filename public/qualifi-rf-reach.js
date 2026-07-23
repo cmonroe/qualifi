@@ -35,12 +35,19 @@ const RF_REACH_UNII_DISPLAY = {
 	'6':         '6 GHz'
 };
 const RF_REACH_DFS_UNII = new Set(['U-NII-2A', 'U-NII-2C']);
+// Filter chips operate on the fine unii_band (computed client-side from
+// frequency), not the server's coarse band: the coarse 5L/5H split straddles
+// the DFS boundary, so a coarse chip could never isolate DFS from non-DFS.
 const RF_REACH_BAND_FILTERS = [
-	{ key: '2.4', label: '2.4G' },
-	{ key: '5L', label: '5GL' },
-	{ key: '5H', label: '5GH' },
-	{ key: '6', label: '6G' }
+	{ key: '2.4',      label: '2.4G', dfs: false },
+	{ key: 'U-NII-1',  label: 'U1',   dfs: false },
+	{ key: 'U-NII-2A', label: 'U2A',  dfs: true },
+	{ key: 'U-NII-2C', label: 'U2C',  dfs: true },
+	{ key: 'U-NII-3',  label: 'U3',   dfs: false },
+	{ key: '6',        label: '6G',   dfs: false }
 ];
+const RF_REACH_BANDS_STORE_KEY = 'qualifi_rf_bands';
+const RF_REACH_VENDOR_SLOTS_STORE_KEY = 'qualifi_rf_vendor_slots';
 
 // Atten window over which the EIRP-proxy median is taken, per coarse band.
 // Lower bound (5 dB) is roughly where AGC stops saturating across the cohort.
@@ -302,8 +309,26 @@ function rf_reach_heatmap_height_compute(y_count) {
 }
 
 let rf_reach_last_facet_divs = [];
-let rf_reach_active_bands = new Set(RF_REACH_BAND_FILTERS.map(b => b.key));
+let rf_reach_active_bands = rf_reach_bands_load();
 let rf_reach_cached_context = null;
+
+function rf_reach_bands_load() {
+	const all = RF_REACH_BAND_FILTERS.map(b => b.key);
+	try {
+		const stored = JSON.parse(localStorage.getItem(RF_REACH_BANDS_STORE_KEY));
+		if (Array.isArray(stored)) {
+			const valid = stored.filter(k => all.includes(k));
+			if (valid.length > 0) return new Set(valid);
+		}
+	} catch (_) { /* corrupted store falls back to all-on */ }
+	return new Set(all);
+}
+
+function rf_reach_bands_save() {
+	try {
+		localStorage.setItem(RF_REACH_BANDS_STORE_KEY, JSON.stringify(Array.from(rf_reach_active_bands)));
+	} catch (_) { /* private mode */ }
+}
 
 
 
@@ -354,11 +379,19 @@ function rf_reach_band_filter_init() {
 	const wrap = document.getElementById('rfReachBandFilters');
 	if (!wrap || wrap.dataset.initialized === '1') return;
 	wrap.dataset.initialized = '1';
-	wrap.innerHTML = RF_REACH_BAND_FILTERS.map(b => `
-		<button type="button" class="rf-band-filter-chip active" data-band="${b.key}" aria-pressed="true">
+	wrap.innerHTML = RF_REACH_BAND_FILTERS.map(b => {
+		const active = rf_reach_active_bands.has(b.key);
+		const dfs_class = b.dfs ? ' rf-chip-dfs' : '';
+		const dfs_title = b.dfs
+			? ' title="DFS band: always excluded from the EIRP/throughput deviation math regardless of this filter"'
+			: '';
+		return `
+		<button type="button" class="rf-band-filter-chip${dfs_class}${active ? ' active' : ''}"
+			data-band="${b.key}" aria-pressed="${active}"${dfs_title}>
 			${b.label}
 		</button>
-	`).join('');
+	`;
+	}).join('');
 	wrap.querySelectorAll('.rf-band-filter-chip').forEach(btn => {
 		btn.addEventListener('click', () => {
 			const band = btn.dataset.band;
@@ -368,6 +401,7 @@ function rf_reach_band_filter_init() {
 			} else {
 				rf_reach_active_bands.add(band);
 			}
+			rf_reach_bands_save();
 			btn.classList.toggle('active', rf_reach_active_bands.has(band));
 			btn.setAttribute('aria-pressed', rf_reach_active_bands.has(band) ? 'true' : 'false');
 			rf_reach_render_cached();
@@ -376,7 +410,7 @@ function rf_reach_band_filter_init() {
 }
 
 function rf_reach_band_filter_apply(rows) {
-	return rows.filter(r => rf_reach_active_bands.has(r.band));
+	return rows.filter(r => rf_reach_active_bands.has(r.unii_band));
 }
 
 function rf_reach_selected_band_labels() {
@@ -438,6 +472,248 @@ function rf_reach_model_label_map(rows) {
 	return labeller;
 }
 
+function rf_reach_percentile(sorted_values, p) {
+	if (sorted_values.length === 0) return null;
+	const pos = (sorted_values.length - 1) * p / 100;
+	const lo = Math.floor(pos);
+	const hi = Math.ceil(pos);
+	if (lo === hi) return sorted_values[lo];
+	return sorted_values[lo] + (sorted_values[hi] - sorted_values[lo]) * (pos - lo);
+}
+
+function rf_reach_window_for_unii(unii) {
+	if (unii === '2.4') return RF_REACH_EIRP_WINDOW_BY_BAND['2.4'];
+	if (unii === '6') return RF_REACH_EIRP_WINDOW_BY_BAND['6'];
+	if (unii) return RF_REACH_EIRP_WINDOW_BY_BAND['5'];
+	return null;
+}
+
+function rf_reach_ols_slope(points) {
+	if (points.length < 3) return null;
+	const n = points.length;
+	let sx = 0, sy = 0, sxx = 0, sxy = 0;
+	for (const p of points) {
+		sx += p.atten;
+		sy += p.value;
+		sxx += p.atten * p.atten;
+		sxy += p.atten * p.value;
+	}
+	const denom = n * sxx - sx * sx;
+	if (denom === 0) return null;
+	return (n * sxy - sx * sy) / denom;
+}
+
+// Per (product, unii_band, BW) reach metrics from boresight RvR rows.
+// Crossings are interpolated over ALL atten steps (reach can land beyond the
+// EIRP window); EIRP stats keep the window + DFS rules so they match the
+// deviation charts. slope checks the -1 dB/dB assumption the EIRP proxy
+// rests on: a chamber sweep whose RSSI-vs-atten slope strays from -1 has a
+// nonlinearity (AGC, saturation, interference) that biases the proxy.
+function rf_reach_product_metrics_compute(rvr_rows) {
+	const groups = new Map();
+	const group_get = (r) => {
+		const key = `${r.model_label}|${r.unii_band}|${r.bandwidth_mhz}`;
+		if (!groups.has(key)) {
+			groups.set(key, {
+				key,
+				label: r.model_label, vendor: r.vendor, model: r.model,
+				unii_band: r.unii_band, bw_mhz: r.bandwidth_mhz,
+				eirp_values: [], rssi_cells: new Map(), tput_cells: new Map()
+			});
+		}
+		return groups.get(key);
+	};
+	for (const r of rvr_rows) {
+		if (r.atten_db === null || r.atten_db === undefined) continue;
+		const g = group_get(r);
+		const rc = g.rssi_cells.get(r.atten_db) || { sum: 0, n: 0 };
+		rc.sum += r.rssi_dbm;
+		rc.n += 1;
+		g.rssi_cells.set(r.atten_db, rc);
+		if (r.tput_mbps !== null && Number.isFinite(r.tput_mbps)) {
+			const tc = g.tput_cells.get(r.atten_db) || { sum: 0, n: 0 };
+			tc.sum += r.tput_mbps;
+			tc.n += 1;
+			g.tput_cells.set(r.atten_db, tc);
+		}
+		if (!RF_REACH_DFS_UNII.has(r.unii_band) && rf_reach_eirp_in_window(r)) {
+			g.eirp_values.push(r.rssi_dbm + r.atten_db);
+		}
+	}
+	const metrics = new Map();
+	for (const g of groups.values()) {
+		const cell_points = (cells) => Array.from(cells.entries())
+			.map(([atten, c]) => ({ atten, value: c.sum / c.n }))
+			.sort((a, b) => a.atten - b.atten);
+		const rssi_points = cell_points(g.rssi_cells);
+		const tput_points = cell_points(g.tput_cells);
+		const eirp_sorted = [...g.eirp_values].sort((a, b) => a - b);
+		const win = rf_reach_window_for_unii(g.unii_band);
+		const in_win = (p) => win && p.atten >= win[0] && p.atten <= win[1];
+		const win_rssi = rssi_points.filter(in_win);
+		const win_tput = tput_points.filter(in_win).map(p => p.value);
+		const slope = rf_reach_ols_slope(win_rssi);
+		metrics.set(g.key, {
+			label: g.label, vendor: g.vendor, model: g.model,
+			unii_band: g.unii_band, bw_mhz: g.bw_mhz,
+			n_steps: rssi_points.length,
+			eirp_med: eirp_sorted.length ? rf_reach_median(eirp_sorted) : null,
+			eirp_p25: rf_reach_percentile(eirp_sorted, 25),
+			eirp_p75: rf_reach_percentile(eirp_sorted, 75),
+			tput_med: win_tput.length ? rf_reach_median([...win_tput]) : null,
+			reach10: atten_at_threshold(tput_points, 10),
+			reach100: atten_at_threshold(tput_points, 100),
+			reach_bars2: atten_at_threshold(rssi_points, RF_REACH_BARS_THRESHOLDS[1]),
+			slope,
+			slope_ok: slope === null ? null : Math.abs(slope + 1) <= 0.15
+		});
+	}
+	return metrics;
+}
+
+// Rank value in dB: interpolated atten where mean throughput crosses 10 Mbps,
+// falling back to the RSSI 2-bars crossing for reports without throughput.
+// A censored crossing (sweep ended above threshold) outranks an uncensored
+// crossing at the same atten.
+function rf_reach_rank_value(m) {
+	const crossing = m.reach10 || m.reach_bars2;
+	if (!crossing) return null;
+	return crossing.atten + (crossing.censored ? 0.5 : 0);
+}
+
+function rf_reach_product_scores_compute(metrics) {
+	const facets = new Map();
+	for (const m of metrics.values()) {
+		const v = rf_reach_rank_value(m);
+		if (v === null) continue;
+		const fk = `${m.unii_band}|${m.bw_mhz}`;
+		if (!facets.has(fk)) facets.set(fk, []);
+		facets.get(fk).push({ label: m.label, v });
+	}
+	const scores = new Map();
+	for (const items of facets.values()) {
+		items.sort((a, b) => b.v - a.v);
+		const n = items.length;
+		items.forEach((item, idx) => {
+			const pct = n === 1 ? 1 : 1 - idx / (n - 1);
+			const s = scores.get(item.label) || { sum: 0, n: 0 };
+			s.sum += pct;
+			s.n += 1;
+			scores.set(item.label, s);
+		});
+	}
+	const out = new Map();
+	for (const [label, s] of scores.entries()) out.set(label, s.sum / s.n);
+	return out;
+}
+
+function rf_reach_vendor_slots_load() {
+	try {
+		const stored = JSON.parse(localStorage.getItem(RF_REACH_VENDOR_SLOTS_STORE_KEY));
+		if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+			const valid = {};
+			for (const [vendor, slot] of Object.entries(stored)) {
+				if (Number.isInteger(slot) && slot >= 0 && slot < SLOT_SHADES.length) valid[vendor] = slot;
+			}
+			return valid;
+		}
+	} catch (_) { /* corrupted store resets assignments */ }
+	return {};
+}
+
+function rf_reach_vendor_slots_save(slots) {
+	try {
+		localStorage.setItem(RF_REACH_VENDOR_SLOTS_STORE_KEY, JSON.stringify(slots));
+	} catch (_) { /* private mode */ }
+}
+
+// One identity per product, shared by every chart on the tab. Hue encodes the
+// vendor (sticky across sessions via localStorage so a vendor never changes
+// color between visits), shade + marker encode the model within its vendor,
+// and dash separates software versions of one model (newest solid). Built on
+// the unfiltered cohort so band filtering never repaints or reorders anything.
+function rf_reach_product_index_build(rows, metrics) {
+	const vendors = new Map();
+	for (const r of rows) {
+		if (!vendors.has(r.vendor)) vendors.set(r.vendor, new Map());
+		const models = vendors.get(r.vendor);
+		if (!models.has(r.model)) models.set(r.model, new Map());
+		models.get(r.model).set(r.model_label, r.sw_version);
+	}
+	const slots = rf_reach_vendor_slots_load();
+	let slots_dirty = false;
+	// Slots persisted for vendors not currently loaded stay reserved, so a
+	// vendor keeps its hue when it comes back.
+	const reserved = new Set(Object.values(slots));
+	for (const vendor of Array.from(vendors.keys()).sort()) {
+		if (slots[vendor] !== undefined) continue;
+		let slot = 0;
+		while (slot < SLOT_SHADES.length && reserved.has(slot)) slot++;
+		if (slot >= SLOT_SHADES.length) slot = -1;
+		if (slot >= 0) {
+			slots[vendor] = slot;
+			reserved.add(slot);
+			slots_dirty = true;
+		}
+	}
+	if (slots_dirty) rf_reach_vendor_slots_save(slots);
+	const version_cmp = (a, b) => typeof compare_versions === 'function'
+		? compare_versions(String(a), String(b))
+		: String(a).localeCompare(String(b), undefined, { numeric: true });
+	const scores = rf_reach_product_scores_compute(metrics);
+	const overflow = rf_reach_css_var('--chart-cat-overflow', '#8a8a8a');
+	const products = new Map();
+	for (const [vendor, models] of vendors.entries()) {
+		const slot = slots[vendor] !== undefined ? slots[vendor] : -1;
+		Array.from(models.keys()).sort().forEach((model, model_idx) => {
+			// Cycle shades rather than capping: with the marker also advancing,
+			// (shade, marker) pairs stay unique until 24 models per vendor.
+			const shade_idx = model_idx % SLOT_SHADES[0].length;
+			const color = slot >= 0 ? SLOT_SHADES[slot][shade_idx] : overflow;
+			const marker = MODEL_MARKERS[model_idx % MODEL_MARKERS.length];
+			const versions = Array.from(models.get(model).entries())
+				.sort((a, b) => version_cmp(a[1], b[1]));
+			versions.forEach(([label, sw], version_idx) => {
+				products.set(label, {
+					vendor, model, label, slot, shade_idx, color, marker,
+					dash: version_idx === versions.length - 1 ? 'solid' : 'dash',
+					score: scores.has(label) ? scores.get(label) : -1
+				});
+			});
+		});
+	}
+	const order = Array.from(products.keys()).sort((a, b) => {
+		const pa = products.get(a);
+		const pb = products.get(b);
+		if (pb.score !== pa.score) return pb.score - pa.score;
+		return a.localeCompare(b);
+	});
+	return { products, order };
+}
+
+function rf_reach_product_style(label) {
+	const index = rf_reach_cached_context && rf_reach_cached_context.product_index;
+	const p = index && index.products.get(label);
+	if (p) return p;
+	return {
+		color: rf_reach_css_var('--chart-cat-overflow', '#8a8a8a'),
+		marker: 'circle',
+		dash: 'solid'
+	};
+}
+
+// Global cohort order (best overall reach first) restricted to the labels
+// present in one chart or facet. Unknown labels append alphabetically so a
+// chart never drops a product the index missed.
+function rf_reach_order_filter(labels_present) {
+	const index = rf_reach_cached_context && rf_reach_cached_context.product_index;
+	const present = labels_present instanceof Set ? labels_present : new Set(labels_present);
+	if (!index) return Array.from(present).sort();
+	const ordered = index.order.filter(l => present.has(l));
+	const missing = Array.from(present).filter(l => !ordered.includes(l)).sort();
+	return ordered.concat(missing);
+}
+
 function rf_reach_facets_collect(rows) {
 	const groups = new Map();
 	for (const r of rows) {
@@ -472,35 +748,8 @@ function rf_reach_pivot_mean(rows, value_fn) {
 	return { y_keys: y_keys_array, x_keys, cells };
 }
 
-function rf_reach_y_order_by_mean_rssi(rows, label_fn) {
-	const sums = new Map();
-	for (const r of rows) {
-		const k = label_fn(r);
-		const bucket = sums.get(k) || { sum: 0, n: 0 };
-		bucket.sum += r.rssi_dbm;
-		bucket.n += 1;
-		sums.set(k, bucket);
-	}
-	return Array.from(sums.entries())
-		.map(([k, v]) => ({ k, mean: v.sum / v.n }))
-		.sort((a, b) => b.mean - a.mean)
-		.map(o => o.k);
-}
-
-function rf_reach_y_order_by_mean_tput(rows, label_fn) {
-	const sums = new Map();
-	for (const r of rows) {
-		if (r.tput_mbps === null || r.tput_mbps === undefined || Number.isNaN(r.tput_mbps)) continue;
-		const k = label_fn(r);
-		const bucket = sums.get(k) || { sum: 0, n: 0 };
-		bucket.sum += r.tput_mbps;
-		bucket.n += 1;
-		sums.set(k, bucket);
-	}
-	return Array.from(sums.entries())
-		.map(([k, v]) => ({ k, mean: v.sum / v.n }))
-		.sort((a, b) => b.mean - a.mean)
-		.map(o => o.k);
+function rf_reach_y_order_global(rows, label_fn) {
+	return rf_reach_order_filter(rows.map(label_fn));
 }
 
 function rf_reach_x_keys_global(rows) {
@@ -728,7 +977,7 @@ function rf_reach_faceted_heatmap_render(container, rows, config) {
 	const x_range = global_x_keys.length ? [global_x_keys[0], global_x_keys[global_x_keys.length - 1]] : null;
 	const layout_overrides = config.layout || {};
 	const value_fn = config.value_fn || (r => r.rssi_dbm);
-	const y_order_fn = config.y_order_fn || rf_reach_y_order_by_mean_rssi;
+	const y_order_fn = config.y_order_fn || rf_reach_y_order_global;
 	facets.forEach((facet, i) => {
 		const order = y_order_fn(facet.rows, r => r.model_label);
 		const pivot = rf_reach_pivot_mean(facet.rows, value_fn);
@@ -836,7 +1085,6 @@ function chart_tput_heatmap_render(container, rows) {
 	const f = rf_reach_mono_font();
 	rf_reach_faceted_heatmap_render(container, rows, {
 		value_fn: r => r.tput_mbps,
-		y_order_fn: rf_reach_y_order_by_mean_tput,
 		trace: {
 			colorscale: RF_REACH_TPUT_COLORSCALE,
 			zmin: 0,
@@ -863,11 +1111,6 @@ function chart_tput_vs_atten_render(container, rows) {
 		container.innerHTML = '<div class="cross-report-empty">No throughput data in loaded reports</div>';
 		return;
 	}
-	const all_models = new Set();
-	for (const f of non_empty) for (const r of f.rows) all_models.add(r.model_label);
-	const color_map = rf_reach_polar_color_map(
-		Array.from(all_models).map(label => ({ label }))
-	);
 	const divs = rf_reach_facet_grid_make(container, non_empty.length, 560, 1);
 	rf_reach_last_facet_divs = rf_reach_last_facet_divs.concat(divs);
 	non_empty.forEach((facet, i) => {
@@ -897,10 +1140,11 @@ function chart_tput_vs_atten_render(container, rows) {
 			});
 		}
 		const traces = [];
-		for (const [label, points] of per_model.entries()) {
+		for (const label of rf_reach_order_filter(Array.from(per_model.keys()))) {
+			const points = per_model.get(label);
 			points.sort((a, b) => a.atten - b.atten);
 			if (points.length === 0) continue;
-			const color = color_map.get(label) || '#94a3b8';
+			const style = rf_reach_product_style(label);
 			traces.push({
 				type: 'scatter',
 				mode: 'lines+markers',
@@ -908,8 +1152,8 @@ function chart_tput_vs_atten_render(container, rows) {
 				y: points.map(p => p.tput),
 				customdata: points.map(p => [p.rssi]),
 				name: label,
-				line: { color, width: 1.5 },
-				marker: { color, size: 4 },
+				line: { color: style.color, width: 1.5, dash: style.dash },
+				marker: { color: style.color, size: 5, symbol: style.marker },
 				hovertemplate: `<b>${label}</b><br>atten %{x:.0f} dB<br>RSSI %{customdata[0]:.1f} dBm<br>%{y:.0f} Mbps<extra></extra>`,
 				showlegend: true
 			});
@@ -1053,14 +1297,8 @@ function chart_deviation_pair_render(container, eirp_summary, tput_summary, opts
 	const divs = rf_reach_facet_grid_make(container, facets.length * 2, height, 2);
 	rf_reach_last_facet_divs = rf_reach_last_facet_divs.concat(divs);
 	facets.forEach((facet, i) => {
-		let order = [...facet.eirp]
-			.sort((a, b) => b.deviation - a.deviation)
-			.map(s => s.model_label);
-		const tput_extra = facet.tput
-			.filter(s => !order.includes(s.model_label))
-			.sort((a, b) => b.deviation - a.deviation)
-			.map(s => s.model_label);
-		order = order.concat(tput_extra);
+		const labels = new Set([...facet.eirp, ...facet.tput].map(s => s.model_label));
+		const order = rf_reach_order_filter(labels);
 		rf_reach_deviation_chart_render(divs[2 * i], facet, facet.eirp, order, {
 			metric_name: 'EIRP dev',
 			unit: 'dB',
@@ -1103,15 +1341,6 @@ function chart_eirp_tput_deviation_azimuth_render(container, rows) {
 			tput_empty: 'No throughput data in per-band atten window'
 		}
 	);
-}
-
-function rf_reach_bar_drop_atten(attens, bars, threshold) {
-	let last_ok = -Infinity;
-	for (let i = 0; i < attens.length; i++) {
-		const v = bars[i];
-		if (v !== null && v >= threshold) last_ok = attens[i];
-	}
-	return last_ok;
 }
 
 function chart_iphone_bars_rotation_render(container, rows) {
@@ -1160,7 +1389,6 @@ function chart_iphone_bars_rotation_render(container, rows) {
 			bucket.n += 1;
 			cells.set(key, bucket);
 		}
-		const product_scores = new Map();
 		const rows_by_product = new Map();
 		for (const p of facet.products.values()) {
 			const product_rows = [];
@@ -1179,35 +1407,13 @@ function chart_iphone_bars_rotation_render(container, rows) {
 					}
 				}
 				if (!bars.some(v => v !== null)) continue;
-				const valid_bars = bars.filter(v => v !== null);
-				const item = {
-					...p,
-					rotation,
-					bars,
-					customdata,
-					drop2_atten: rf_reach_bar_drop_atten(attens, bars, 2),
-					drop1_atten: rf_reach_bar_drop_atten(attens, bars, 1),
-					mean_bars: valid_bars.reduce((sum, v) => sum + v, 0) / valid_bars.length
-				};
-				product_rows.push(item);
+				product_rows.push({ ...p, rotation, bars, customdata });
 			}
 			if (product_rows.length === 0) continue;
 			rows_by_product.set(p.label, product_rows);
-			const avg = (arr, prop) => arr.reduce((sum, item) => sum + item[prop], 0) / arr.length;
-			product_scores.set(p.label, {
-				vendor: p.vendor,
-				label: p.label,
-				drop2_atten: avg(product_rows, 'drop2_atten'),
-				drop1_atten: avg(product_rows, 'drop1_atten'),
-				mean_bars: avg(product_rows, 'mean_bars')
-			});
 		}
-		const sorted_products = Array.from(product_scores.values()).sort((a, b) => {
-			if (b.drop2_atten !== a.drop2_atten) return b.drop2_atten - a.drop2_atten;
-			if (b.drop1_atten !== a.drop1_atten) return b.drop1_atten - a.drop1_atten;
-			if (b.mean_bars !== a.mean_bars) return b.mean_bars - a.mean_bars;
-			return a.label.localeCompare(b.label);
-		});
+		const sorted_products = rf_reach_order_filter(Array.from(rows_by_product.keys()))
+			.map(label => ({ label }));
 		const row_items = [];
 		for (const p of sorted_products) {
 			const product_rows = rows_by_product.get(p.label) || [];
@@ -1287,23 +1493,6 @@ function chart_iphone_bars_rotation_render(container, rows) {
 	}
 }
 
-// Deterministic per (vendor, model) so the legend chip and trace line stay in
-// sync, and so the same product keeps the same colour across facets. Original
-// qualifi RF Reach cohort palette.
-const RF_REACH_POLAR_COLORS = [
-	'#22d3ee', '#ef4444', '#a78bfa', '#34d399', '#fb923c',
-	'#60a5fa', '#f472b6', '#fbbf24', '#f97316', '#facc15', '#94a3b8'
-];
-
-function rf_reach_polar_color_map(model_labels_with_vendor) {
-	const map = new Map();
-	const sorted = [...model_labels_with_vendor].sort((a, b) => a.label.localeCompare(b.label));
-	sorted.forEach((m, i) => {
-		map.set(m.label, RF_REACH_POLAR_COLORS[i % RF_REACH_POLAR_COLORS.length]);
-	});
-	return map;
-}
-
 function rf_reach_polar_traces_collect(polar_rows, azimuth_rows) {
 	// Primary: 360deg_noatten rows (atten === null, rotation set), 5deg increments.
 	// Fallback: for any (vendor, model, unii_band, bw) missing from primary,
@@ -1357,12 +1546,14 @@ function rf_reach_polar_traces_collect(polar_rows, azimuth_rows) {
 	);
 }
 
-function rf_reach_polar_legend_create(products_with_source, color_map, trace_index_map) {
+function rf_reach_polar_legend_create(products_with_source, trace_index_map) {
 	const wrap = document.createElement('div');
 	wrap.className = 'rf-bars-legend rf-polar-legend';
-	const sorted = [...products_with_source].sort((a, b) => a.label.localeCompare(b.label));
+	const by_label = new Map(products_with_source.map(p => [p.label, p]));
+	const sorted = rf_reach_order_filter(Array.from(by_label.keys()))
+		.map(label => by_label.get(label));
 	for (const p of sorted) {
-		const color = color_map.get(p.label) || '#94a3b8';
+		const color = rf_reach_product_style(p.label).color;
 		const chip = document.createElement('span');
 		chip.className = 'rf-bars-legend-chip rf-polar-legend-chip';
 		chip.tabIndex = 0;
@@ -1421,7 +1612,6 @@ function chart_polar_render(container, polar_rows, azimuth_rows) {
 			}
 		}
 	}
-	const color_map = rf_reach_polar_color_map(Array.from(all_products.values()));
 	const divs = rf_reach_facet_grid_make(container, non_empty.length, 800, 1);
 	rf_reach_last_facet_divs = rf_reach_last_facet_divs.concat(divs);
 	const trace_index_map = [];
@@ -1436,8 +1626,10 @@ function chart_polar_render(container, polar_rows, azimuth_rows) {
 			if (pairs.length < 2) continue;
 			for (const d of pairs) all_rssi.push(d.r);
 			pairs.push({ θ: pairs[0].θ + 360, r: pairs[0].r });
-			const color = color_map.get(p.model_label) || '#94a3b8';
-			const dash = p.source === 'azimuth_fallback' ? 'dot' : 'solid';
+			const style = rf_reach_product_style(p.model_label);
+			// Fallback dot-dash outranks the version dash: knowing a trace came
+			// from the wrong test matters more than which sw version it is.
+			const dash = p.source === 'azimuth_fallback' ? 'dot' : style.dash;
 			label_to_idx[p.model_label] = traces.length;
 			traces.push({
 				type: 'scatterpolar',
@@ -1445,8 +1637,8 @@ function chart_polar_render(container, polar_rows, azimuth_rows) {
 				r: pairs.map(d => d.r),
 				theta: pairs.map(d => d.θ),
 				name: p.model_label + (p.source === 'azimuth_fallback' ? ` (atten ${p.fallback_atten_db} dB)` : ''),
-				line: { color, width: 1.5, dash },
-				marker: { color, size: 4 },
+				line: { color: style.color, width: 1.5, dash },
+				marker: { color: style.color, size: 4, symbol: style.marker },
 				hovertemplate: `<b>${p.model_label}</b><br>θ %{theta:.0f}°<br>RSSI %{r:.1f} dBm<extra></extra>`,
 				showlegend: false
 			});
@@ -1501,7 +1693,7 @@ function chart_polar_render(container, polar_rows, azimuth_rows) {
 		rf_reach_hover_attach(divs[i]);
 	});
 	const legend = rf_reach_polar_legend_create(
-		Array.from(all_products.values()), color_map, trace_index_map
+		Array.from(all_products.values()), trace_index_map
 	);
 	container.insertBefore(legend, container.firstChild);
 }
@@ -1606,7 +1798,11 @@ function rf_reach_render() {
 			const labeller = rf_reach_model_label_map(normalized);
 			for (const r of normalized) r.model_label = labeller(r);
 
-			rf_reach_cached_context = { normalized, paths, local_count, err_count: errs.length };
+			const metrics = rf_reach_product_metrics_compute(rf_reach_filter_rvr(normalized));
+			rf_reach_cached_context = {
+				normalized, paths, local_count, err_count: errs.length, metrics
+			};
+			rf_reach_cached_context.product_index = rf_reach_product_index_build(normalized, metrics);
 			rf_reach_render_cached();
 
 			if (errs.length > 0) console.warn('rf-reach data errors:', errs);
