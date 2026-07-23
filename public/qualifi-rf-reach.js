@@ -321,10 +321,9 @@ function rf_reach_bands_load() {
 	const all = RF_REACH_BAND_FILTERS.map(b => b.key);
 	try {
 		const stored = JSON.parse(localStorage.getItem(RF_REACH_BANDS_STORE_KEY));
-		if (Array.isArray(stored)) {
-			const valid = stored.filter(k => all.includes(k));
-			if (valid.length > 0) return new Set(valid);
-		}
+		// An empty stored array is a deliberate all-off selection; the UI has
+		// an explicit "no bands selected" state, so honor it on reload.
+		if (Array.isArray(stored)) return new Set(stored.filter(k => all.includes(k)));
 	} catch (_) { /* corrupted store falls back to all-on */ }
 	return new Set(all);
 }
@@ -579,28 +578,38 @@ function rf_reach_product_metrics_compute(rvr_rows) {
 	return metrics;
 }
 
-// Rank value in dB: interpolated atten where mean throughput crosses 10 Mbps,
+// Ranking crossing: interpolated atten where mean throughput crosses 10 Mbps,
 // falling back to the RSSI 2-bars crossing for reports without throughput.
-// A censored crossing (sweep ended above threshold) outranks an uncensored
-// crossing at the same atten.
-function rf_reach_rank_value(m) {
-	const crossing = m.reach10 || m.reach_bars2;
-	if (!crossing) return null;
-	return crossing.atten + (crossing.censored ? 0.5 : 0);
+function rf_reach_metric_crossing(m) {
+	return m.reach10 || m.reach_bars2 || null;
+}
+
+// Censoring is only a tie-breaker: a sweep that ended above threshold at the
+// same atten outranks an observed crossing there, but a lower censored bound
+// must not outrank a higher observed crossing (the true value is unknown).
+function rf_reach_crossing_compare(a, b) {
+	if (!a && !b) return 0;
+	if (!a) return -1;
+	if (!b) return 1;
+	if (a.atten !== b.atten) return a.atten - b.atten;
+	return Number(a.censored) - Number(b.censored);
+}
+
+function rf_reach_metric_compare(a, b) {
+	return rf_reach_crossing_compare(rf_reach_metric_crossing(a), rf_reach_metric_crossing(b));
 }
 
 function rf_reach_product_scores_compute(metrics) {
 	const facets = new Map();
 	for (const m of metrics.values()) {
-		const v = rf_reach_rank_value(m);
-		if (v === null) continue;
+		if (!rf_reach_metric_crossing(m)) continue;
 		const fk = `${m.unii_band}|${m.bw_mhz}`;
 		if (!facets.has(fk)) facets.set(fk, []);
-		facets.get(fk).push({ label: m.label, v });
+		facets.get(fk).push({ label: m.label, m });
 	}
 	const scores = new Map();
 	for (const items of facets.values()) {
-		items.sort((a, b) => b.v - a.v);
+		items.sort((a, b) => rf_reach_metric_compare(b.m, a.m));
 		const n = items.length;
 		items.forEach((item, idx) => {
 			const pct = n === 1 ? 1 : 1 - idx / (n - 1);
@@ -933,7 +942,7 @@ function rf_reach_eirp_deviation_compute(rows) {
 	const groups = new Map();
 	for (const r of windowed) {
 		const eirp = r.rssi_dbm + r.atten_db;
-		const key = `${r.vendor}|${r.model}|${r.unii_band}|${r.bandwidth_mhz}`;
+		const key = `${r.model_label}|${r.unii_band}|${r.bandwidth_mhz}`;
 		const bucket = groups.get(key) || {
 			vendor: r.vendor, model: r.model, model_label: r.model_label,
 			unii_band: r.unii_band, bw_mhz: r.bandwidth_mhz, values: []
@@ -961,7 +970,7 @@ function rf_reach_eirp_deviation_azimuth_compute(rows) {
 	);
 	const cells = new Map();
 	for (const r of windowed) {
-		const key = `${r.vendor}|${r.model}|${r.unii_band}|${r.bandwidth_mhz}|${r.atten_db}`;
+		const key = `${r.model_label}|${r.unii_band}|${r.bandwidth_mhz}|${r.atten_db}`;
 		const bucket = cells.get(key) || {
 			vendor: r.vendor, model: r.model, model_label: r.model_label,
 			unii_band: r.unii_band, bw_mhz: r.bandwidth_mhz, atten_db: r.atten_db,
@@ -974,7 +983,7 @@ function rf_reach_eirp_deviation_azimuth_compute(rows) {
 	const groups = new Map();
 	for (const c of cells.values()) {
 		const eirp = (c.sum / c.n) + c.atten_db;
-		const key = `${c.vendor}|${c.model}|${c.unii_band}|${c.bw_mhz}`;
+		const key = `${c.model_label}|${c.unii_band}|${c.bw_mhz}`;
 		const g = groups.get(key) || {
 			vendor: c.vendor, model: c.model, model_label: c.model_label,
 			unii_band: c.unii_band, bw_mhz: c.bw_mhz, values: []
@@ -1003,7 +1012,7 @@ function rf_reach_tput_deviation_compute(rows) {
 	);
 	const groups = new Map();
 	for (const r of windowed) {
-		const key = `${r.vendor}|${r.model}|${r.unii_band}|${r.bandwidth_mhz}`;
+		const key = `${r.model_label}|${r.unii_band}|${r.bandwidth_mhz}`;
 		const bucket = groups.get(key) || {
 			vendor: r.vendor, model: r.model, model_label: r.model_label,
 			unii_band: r.unii_band, bw_mhz: r.bandwidth_mhz, values: []
@@ -1031,7 +1040,7 @@ function rf_reach_tput_deviation_azimuth_compute(rows) {
 	);
 	const cells = new Map();
 	for (const r of windowed) {
-		const key = `${r.vendor}|${r.model}|${r.unii_band}|${r.bandwidth_mhz}|${r.atten_db}`;
+		const key = `${r.model_label}|${r.unii_band}|${r.bandwidth_mhz}|${r.atten_db}`;
 		const bucket = cells.get(key) || {
 			vendor: r.vendor, model: r.model, model_label: r.model_label,
 			unii_band: r.unii_band, bw_mhz: r.bandwidth_mhz, atten_db: r.atten_db,
@@ -1044,7 +1053,7 @@ function rf_reach_tput_deviation_azimuth_compute(rows) {
 	const groups = new Map();
 	for (const c of cells.values()) {
 		const mean_tput = c.sum / c.n;
-		const key = `${c.vendor}|${c.model}|${c.unii_band}|${c.bw_mhz}`;
+		const key = `${c.model_label}|${c.unii_band}|${c.bw_mhz}`;
 		const g = groups.get(key) || {
 			vendor: c.vendor, model: c.model, model_label: c.model_label,
 			unii_band: c.unii_band, bw_mhz: c.bw_mhz, values: []
@@ -1924,7 +1933,7 @@ function rf_reach_leaderboard_facets(metrics) {
 	const by_unii = new Map();
 	for (const m of metrics.values()) {
 		if (!rf_reach_active_bands.has(m.unii_band)) continue;
-		if (rf_reach_rank_value(m) === null) continue;
+		if (!rf_reach_metric_crossing(m)) continue;
 		if (!by_unii.has(m.unii_band)) by_unii.set(m.unii_band, new Map());
 		const by_bw = by_unii.get(m.unii_band);
 		if (!by_bw.has(m.bw_mhz)) by_bw.set(m.bw_mhz, []);
@@ -1985,7 +1994,7 @@ function chart_reach_leaderboard_render(container, metrics) {
 	container.insertBefore(rf_reach_reach_legend_create(), container.firstChild);
 	rf_reach_last_facet_divs = rf_reach_last_facet_divs.concat(divs);
 	facets.forEach((facet, i) => {
-		const items = [...facet.items].sort((a, b) => rf_reach_rank_value(b) - rf_reach_rank_value(a));
+		const items = [...facet.items].sort((a, b) => rf_reach_metric_compare(b, a));
 		const labels = items.map(m => m.label);
 		const conn_x = [];
 		const conn_y = [];
@@ -2133,7 +2142,7 @@ function rf_reach_summary_tiles_render(container, metrics) {
 	const focus = rf_reach_focus_labels();
 	const groups = rf_reach_tile_groups(metrics);
 	for (const g of groups) {
-		const items = [...g.facet.items].sort((a, b) => rf_reach_rank_value(b) - rf_reach_rank_value(a));
+		const items = [...g.facet.items].sort((a, b) => rf_reach_metric_compare(b, a));
 		const leader = items[0];
 		const crossing = leader.reach10 || leader.reach_bars2;
 		const tile = document.createElement('div');
@@ -2150,10 +2159,13 @@ function rf_reach_summary_tiles_render(container, metrics) {
 		const detail = document.createElement('div');
 		detail.className = 'rf-tile-detail';
 		if (items.length > 1) {
-			const runner = rf_reach_rank_value(items[0]) - rf_reach_rank_value(items[1]);
+			const runner_crossing = rf_reach_metric_crossing(items[1]);
+			const margin = crossing.atten - runner_crossing.atten;
+			// A censored leader's margin is itself a lower bound.
+			const margin_text = `${crossing.censored ? '≥' : ''}${margin.toFixed(1)}`;
 			detail.textContent = leader.reach10
-				? `@10 Mbps · +${runner.toFixed(1)} dB over #2`
-				: `2-bars RSSI · +${runner.toFixed(1)} dB over #2`;
+				? `@10 Mbps · +${margin_text} dB over #2`
+				: `2-bars RSSI · +${margin_text} dB over #2`;
 		} else {
 			detail.textContent = leader.reach10 ? '@10 Mbps · only product' : '2-bars RSSI · only product';
 		}
@@ -2166,10 +2178,10 @@ function rf_reach_summary_tiles_render(container, metrics) {
 				delta_el.textContent = '▲ yours leads this band';
 				tile.appendChild(delta_el);
 			} else if (focus_item) {
-				const delta = rf_reach_rank_value(focus_item) - rf_reach_rank_value(leader);
-				const crossing = focus_item.reach10 || focus_item.reach_bars2;
+				const focus_crossing = rf_reach_metric_crossing(focus_item);
+				const delta = focus_crossing.atten - crossing.atten;
 				delta_el.className = 'rf-tile-delta rf-tile-delta-down';
-				delta_el.textContent = `▼ yours: ${rf_reach_crossing_text(crossing)} dB (${delta.toFixed(1)})`;
+				delta_el.textContent = `▼ yours: ${rf_reach_crossing_text(focus_crossing)} dB (${delta.toFixed(1)})`;
 				tile.appendChild(delta_el);
 			}
 		}
@@ -2373,8 +2385,10 @@ function rf_reach_block_csv_download(chart_container) {
 		lines.push(['product', ...trace.x].join(','));
 		const y_labels = (div.layout && div.layout.yaxis && div.layout.yaxis.ticktext) || trace.y;
 		trace.z.forEach((row, ri) => {
+			// ticktext is presentation markup (focus rows are <b>-wrapped);
+			// exported identifiers must be plain text.
 			lines.push([
-				rf_reach_csv_escape(String(y_labels[ri]).trim()),
+				rf_reach_csv_escape(String(y_labels[ri]).replace(/<\/?b>/g, '').trim()),
 				...row.map(v => v === null || v === undefined ? '' : v)
 			].join(','));
 		});

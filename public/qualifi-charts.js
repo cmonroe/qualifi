@@ -670,17 +670,27 @@ function toggle_view_mode() {
 	const toggle_chart_type_btn = document.querySelector('.chart-button[onclick="toggleChartType()"]');
 	const chart_container = document.querySelector('.chart-container');
 
+	const table_btn = document.getElementById('tableViewToggle');
+	const table_div = document.getElementById('chartDataTable');
+
 	if (current_view_mode === 'cartesian') {
 		current_view_mode = 'polar';
 		toggle_btn.textContent = 'Switch to Standard View';
 		cartesian_wrapper.style.display = 'none';
 		polar_wrapper.style.display = 'block';
 		if (toggle_chart_type_btn) toggle_chart_type_btn.style.display = 'none';
+		// The table twin mirrors the Cartesian chart only; polar mode hides
+		// both the table and its toggle so stale data never sits beside the
+		// polar plot.
+		if (table_btn) table_btn.style.display = 'none';
+		if (table_div) table_div.style.display = 'none';
 		if (chart_container) chart_container.classList.add('polar-mode');
 		updateChart();
 	} else {
 		current_view_mode = 'cartesian';
 		toggle_btn.textContent = 'Switch to Polar View';
+		if (table_btn) table_btn.style.display = 'inline-block';
+		if (table_div) table_div.style.display = chart_table_visible ? 'block' : 'none';
 		cartesian_wrapper.style.display = 'block';
 		polar_wrapper.style.display = 'none';
 		if (chart_container) chart_container.classList.remove('polar-mode');
@@ -1094,7 +1104,8 @@ function drawChart(selected_tests) {
 		if (chart_zoom_active && chart_instance.scales && chart_instance.scales.x) {
 			zoom_restore = {
 				x: { min: chart_instance.scales.x.min, max: chart_instance.scales.x.max },
-				y: { min: chart_instance.scales.y.min, max: chart_instance.scales.y.max }
+				y: { min: chart_instance.scales.y.min, max: chart_instance.scales.y.max },
+				rotation_axis: chart_instance.$qualifi_rotation === true
 			};
 		}
 		chart_instance.destroy();
@@ -1614,9 +1625,29 @@ function drawChart(selected_tests) {
 		}
 	});
 
+	chart_instance.$qualifi_rotation = is_pure_rotation;
+
+	// Restore the viewport only when it still makes sense for the new data:
+	// same axis kind (atten vs rotation angle) and an x-window that overlaps
+	// the new data. A selection change to an unrelated test otherwise renders
+	// an empty slice of someone else's zoom.
 	if (zoom_restore && typeof chart_instance.zoomScale === 'function') {
-		chart_instance.zoomScale('x', zoom_restore.x, 'none');
-		chart_instance.zoomScale('y', zoom_restore.y, 'none');
+		let x_min = Infinity;
+		let x_max = -Infinity;
+		datasets.forEach(ds => ds.data.forEach(p => {
+			if (p.x < x_min) x_min = p.x;
+			if (p.x > x_max) x_max = p.x;
+		}));
+		const compatible = zoom_restore.rotation_axis === is_pure_rotation
+			&& zoom_restore.x.min < x_max && zoom_restore.x.max > x_min;
+		if (compatible) {
+			chart_instance.zoomScale('x', zoom_restore.x, 'none');
+			chart_instance.zoomScale('y', zoom_restore.y, 'none');
+		} else {
+			chart_zoom_active = false;
+			const reset_btn = document.getElementById('resetZoomButton');
+			if (reset_btn) reset_btn.style.display = 'none';
+		}
 	}
 	if (chart_table_visible) chart_table_render();
 }
