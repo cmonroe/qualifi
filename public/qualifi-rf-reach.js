@@ -421,6 +421,7 @@ function rf_reach_selected_band_labels() {
 
 function rf_reach_charts_clear(message) {
 	const ids = [
+		'reachLeaderboardDiv', 'reachLeaderboardTable',
 		'rssiHeatmapDiv', 'tputHeatmapDiv', 'iphoneBarsDiv', 'tputVsAttenDiv',
 		'eirpTputDeviationDiv', 'eirpTputDeviationAzimuthDiv',
 		'iphoneBarsRotationDiv', 'polarDiv'
@@ -429,6 +430,8 @@ function rf_reach_charts_clear(message) {
 		const el = document.getElementById(id);
 		if (el) el.innerHTML = `<div class="cross-report-empty">${message}</div>`;
 	});
+	const tiles = document.getElementById('rfReachTiles');
+	if (tiles) tiles.textContent = '';
 }
 
 function rf_reach_normalize(rows) {
@@ -1698,6 +1701,483 @@ function chart_polar_render(container, polar_rows, azimuth_rows) {
 	container.insertBefore(legend, container.firstChild);
 }
 
+// Headline facet per band: the most-populated (unii, BW) combination, so the
+// leaderboard compares the largest possible cohort. Ties prefer the wider BW.
+// Every other (band, BW) facet stays reachable through the table view / CSV.
+function rf_reach_leaderboard_facets(metrics) {
+	const by_unii = new Map();
+	for (const m of metrics.values()) {
+		if (!rf_reach_active_bands.has(m.unii_band)) continue;
+		if (rf_reach_rank_value(m) === null) continue;
+		if (!by_unii.has(m.unii_band)) by_unii.set(m.unii_band, new Map());
+		const by_bw = by_unii.get(m.unii_band);
+		if (!by_bw.has(m.bw_mhz)) by_bw.set(m.bw_mhz, []);
+		by_bw.get(m.bw_mhz).push(m);
+	}
+	const facets = [];
+	for (const [unii, by_bw] of by_unii.entries()) {
+		let best = null;
+		for (const [bw, items] of by_bw.entries()) {
+			const better = !best
+				|| items.length > best.items.length
+				|| (items.length === best.items.length && bw > best.bw_mhz);
+			if (better) best = { bw_mhz: bw, items };
+		}
+		facets.push({ unii_band: unii, bw_mhz: best.bw_mhz, items: best.items });
+	}
+	return facets.sort((a, b) =>
+		rf_reach_facet_sort_key(a.unii_band, a.bw_mhz) - rf_reach_facet_sort_key(b.unii_band, b.bw_mhz)
+	);
+}
+
+function rf_reach_crossing_text(crossing, decimals) {
+	if (!crossing) return null;
+	const dec = decimals !== undefined ? decimals : 1;
+	return `${crossing.censored ? '≥' : ''}${crossing.atten.toFixed(dec)}`;
+}
+
+function rf_reach_reach_legend_create() {
+	const wrap = document.createElement('div');
+	wrap.className = 'rf-bars-legend';
+	wrap.innerHTML = `
+		<span class="rf-bars-legend-chip">
+			<span class="rf-bars-legend-swatch rf-reach-dot-solid"></span>
+			<span class="rf-bars-legend-label">@10 Mbps</span>
+			<span class="rf-bars-legend-detail">edge reach</span>
+		</span>
+		<span class="rf-bars-legend-chip">
+			<span class="rf-bars-legend-swatch rf-reach-dot-open"></span>
+			<span class="rf-bars-legend-label">@100 Mbps</span>
+			<span class="rf-bars-legend-detail">strong-signal reach</span>
+		</span>
+		<span class="rf-bars-legend-chip">
+			<span class="rf-bars-legend-label">&ge;</span>
+			<span class="rf-bars-legend-detail">sweep ended above threshold</span>
+		</span>
+	`;
+	return wrap;
+}
+
+function chart_reach_leaderboard_render(container, metrics) {
+	const facets = rf_reach_leaderboard_facets(metrics);
+	if (facets.length === 0) {
+		container.innerHTML = '<div class="cross-report-empty">No reach metrics for the selected bands</div>';
+		return;
+	}
+	const max_rows = facets.reduce((m, f) => Math.max(m, f.items.length), 0);
+	const divs = rf_reach_facet_grid_make(container, facets.length, Math.max(240, 90 + 30 * max_rows), 1);
+	container.insertBefore(rf_reach_reach_legend_create(), container.firstChild);
+	rf_reach_last_facet_divs = rf_reach_last_facet_divs.concat(divs);
+	facets.forEach((facet, i) => {
+		const items = [...facet.items].sort((a, b) => rf_reach_rank_value(b) - rf_reach_rank_value(a));
+		const labels = items.map(m => m.label);
+		const conn_x = [];
+		const conn_y = [];
+		const attens = [];
+		for (const m of items) {
+			for (const c of [m.reach10, m.reach100, m.reach10 ? null : m.reach_bars2]) {
+				if (c) attens.push(c.atten);
+			}
+			if (m.reach10 && m.reach100) {
+				conn_x.push(m.reach100.atten, m.reach10.atten, null);
+				conn_y.push(m.label, m.label, null);
+			}
+		}
+		const edge = items.filter(m => m.reach10 || m.reach_bars2);
+		const strong = items.filter(m => m.reach100);
+		const traces = [];
+		if (conn_x.length > 0) {
+			traces.push({
+				type: 'scatter',
+				mode: 'lines',
+				x: conn_x,
+				y: conn_y,
+				line: { color: rf_reach_palette().line, width: 2 },
+				hoverinfo: 'skip',
+				showlegend: false
+			});
+		}
+		traces.push({
+			type: 'scatter',
+			mode: 'markers',
+			x: strong.map(m => m.reach100.atten),
+			y: strong.map(m => m.label),
+			marker: {
+				color: strong.map(m => rf_reach_product_style(m.label).color),
+				size: 9,
+				symbol: strong.map(m => `${rf_reach_product_style(m.label).marker}-open`),
+				line: { width: 2 }
+			},
+			meta: { restingSize: 9, hoverSize: 14 },
+			customdata: strong.map(m => [rf_reach_crossing_text(m.reach100)]),
+			hovertemplate: '<b>%{y}</b><br>reach@100Mbps %{customdata[0]} dB<extra></extra>',
+			showlegend: false
+		});
+		traces.push({
+			type: 'scatter',
+			mode: 'markers',
+			x: edge.map(m => (m.reach10 || m.reach_bars2).atten),
+			y: edge.map(m => m.label),
+			marker: {
+				color: edge.map(m => rf_reach_product_style(m.label).color),
+				size: 11,
+				symbol: edge.map(m => rf_reach_product_style(m.label).marker),
+				line: { width: 0 }
+			},
+			meta: { restingSize: 11, hoverSize: 16 },
+			customdata: edge.map(m => [
+				m.reach10
+					? `reach@10Mbps ${rf_reach_crossing_text(m.reach10)} dB`
+					: `2-bars RSSI reach ${rf_reach_crossing_text(m.reach_bars2)} dB (no throughput data)`,
+				m.reach100 ? `reach@100Mbps ${rf_reach_crossing_text(m.reach100)} dB` : ''
+			]),
+			hovertemplate: '<b>%{y}</b><br>%{customdata[0]}<br>%{customdata[1]}<extra></extra>',
+			showlegend: false
+		});
+		const leader = items[0];
+		const leader_crossing = leader.reach10 || leader.reach_bars2;
+		if (leader_crossing) {
+			traces.push({
+				type: 'scatter',
+				mode: 'text',
+				x: [leader_crossing.atten],
+				y: [leader.label],
+				text: [`${rf_reach_crossing_text(leader_crossing)} dB`],
+				textposition: 'middle right',
+				textfont: {
+					color: rf_reach_palette().text_primary,
+					family: rf_reach_mono_font(),
+					size: 11
+				},
+				hoverinfo: 'skip',
+				showlegend: false,
+				cliponaxis: false
+			});
+		}
+		const x_min = Math.min(...attens);
+		const x_max = Math.max(...attens);
+		Plotly.newPlot(divs[i], traces, {
+			...rf_reach_layout_base(),
+			hovermode: 'closest',
+			title: {
+				text: `${rf_reach_facet_label(facet.unii_band, facet.bw_mhz)}  (n=${items.length})`,
+				font: rf_reach_title_font(),
+				x: 0.02,
+				xanchor: 'left',
+				y: 0.97
+			},
+			xaxis: {
+				...rf_reach_axis_base(),
+				title: { text: 'attenuation at throughput crossing (dB)', font: { color: rf_reach_palette().text_tertiary, family: rf_reach_mono_font(), size: 11 } },
+				range: [Math.floor(x_min - 3), Math.ceil(x_max + 3)]
+			},
+			yaxis: {
+				...rf_reach_axis_base(),
+				autorange: 'reversed',
+				categoryorder: 'array',
+				categoryarray: labels,
+				gridcolor: 'transparent'
+			},
+			margin: { l: 200, r: 80, t: 56, b: 60 }
+		}, { responsive: true, displayModeBar: false });
+		rf_reach_hover_attach(divs[i]);
+	});
+}
+
+// Band groups for the stat tiles: one headline per spectrum band, preferring
+// non-DFS 5 GHz facets so the tile is not skewed by TPC-limited DFS numbers.
+function rf_reach_tile_groups(metrics) {
+	const facets = rf_reach_leaderboard_facets(metrics);
+	const groups = [
+		{ name: '2.4 GHz', match: (u) => u === '2.4', preferred: (u) => true },
+		{ name: '5 GHz', match: (u) => u.startsWith('U-NII'), preferred: (u) => !RF_REACH_DFS_UNII.has(u) },
+		{ name: '6 GHz', match: (u) => u === '6', preferred: (u) => true }
+	];
+	const out = [];
+	for (const g of groups) {
+		const candidates = facets.filter(f => g.match(f.unii_band));
+		if (candidates.length === 0) continue;
+		const preferred = candidates.filter(f => g.preferred(f.unii_band));
+		const pool = preferred.length > 0 ? preferred : candidates;
+		const facet = pool.reduce((best, f) => f.items.length > best.items.length ? f : best);
+		out.push({ name: g.name, facet });
+	}
+	return out;
+}
+
+function rf_reach_summary_tiles_render(container, metrics) {
+	if (!container) return;
+	container.textContent = '';
+	const groups = rf_reach_tile_groups(metrics);
+	for (const g of groups) {
+		const items = [...g.facet.items].sort((a, b) => rf_reach_rank_value(b) - rf_reach_rank_value(a));
+		const leader = items[0];
+		const crossing = leader.reach10 || leader.reach_bars2;
+		const tile = document.createElement('div');
+		tile.className = 'rf-tile';
+		const band = document.createElement('div');
+		band.className = 'rf-tile-band';
+		band.textContent = `${g.name} · ${Math.round(g.facet.bw_mhz)} MHz · n=${items.length}`;
+		const value = document.createElement('div');
+		value.className = 'rf-tile-value';
+		value.textContent = `${rf_reach_crossing_text(crossing)} dB`;
+		const leader_el = document.createElement('div');
+		leader_el.className = 'rf-tile-leader';
+		leader_el.textContent = leader.label;
+		const detail = document.createElement('div');
+		detail.className = 'rf-tile-detail';
+		if (items.length > 1) {
+			const runner = rf_reach_rank_value(items[0]) - rf_reach_rank_value(items[1]);
+			detail.textContent = leader.reach10
+				? `@10 Mbps · +${runner.toFixed(1)} dB over #2`
+				: `2-bars RSSI · +${runner.toFixed(1)} dB over #2`;
+		} else {
+			detail.textContent = leader.reach10 ? '@10 Mbps · only product' : '2-bars RSSI · only product';
+		}
+		tile.append(band, value, leader_el, detail);
+		container.appendChild(tile);
+	}
+}
+
+let rf_reach_leaderboard_view = 'chart';
+let rf_reach_table_sort = { key: 'rank', asc: true };
+
+function rf_reach_leaderboard_view_set(view) {
+	rf_reach_leaderboard_view = view;
+	const chart = document.getElementById('reachLeaderboardDiv');
+	const table = document.getElementById('reachLeaderboardTable');
+	if (chart) chart.style.display = view === 'chart' ? '' : 'none';
+	if (table) table.style.display = view === 'table' ? '' : 'none';
+	document.querySelectorAll('.rf-view-toggle-btn').forEach(b =>
+		b.classList.toggle('active', b.dataset.view === view));
+	if (view === 'chart') rf_reach_resize();
+}
+
+const RF_REACH_TABLE_COLUMNS = [
+	{ key: 'rank', label: '#', numeric: true },
+	{ key: 'product', label: 'Product', numeric: false },
+	{ key: 'band_key', label: 'Band', numeric: true },
+	{ key: 'bw_mhz', label: 'BW', numeric: true },
+	{ key: 'n_steps', label: 'Steps', numeric: true },
+	{ key: 'reach10_v', label: '@10 Mbps (dB)', numeric: true },
+	{ key: 'reach100_v', label: '@100 Mbps (dB)', numeric: true },
+	{ key: 'bars2_v', label: '2-bars (dB)', numeric: true },
+	{ key: 'eirp_med', label: 'EIRP med (dBm)', numeric: true },
+	{ key: 'tput_med', label: 'Tput med (Mbps)', numeric: true },
+	{ key: 'slope', label: 'Slope', numeric: true }
+];
+
+function rf_reach_leaderboard_table_render(container, metrics) {
+	if (!container) return;
+	const rows = Array.from(metrics.values()).filter(m => rf_reach_active_bands.has(m.unii_band));
+	if (rows.length === 0) {
+		container.innerHTML = '<div class="cross-report-empty">No data for the selected bands</div>';
+		return;
+	}
+	const rank = new Map(rf_reach_order_filter(new Set(rows.map(r => r.label))).map((l, i) => [l, i + 1]));
+	const cv = (c) => c === null ? null : c.atten + (c.censored ? 0.001 : 0);
+	const data = rows.map(m => ({
+		rank: rank.get(m.label),
+		product: m.label,
+		band: RF_REACH_UNII_DISPLAY[m.unii_band] || m.unii_band,
+		band_key: rf_reach_facet_sort_key(m.unii_band, m.bw_mhz),
+		bw_mhz: m.bw_mhz,
+		n_steps: m.n_steps,
+		reach10_v: cv(m.reach10), reach10_t: rf_reach_crossing_text(m.reach10),
+		reach100_v: cv(m.reach100), reach100_t: rf_reach_crossing_text(m.reach100),
+		bars2_v: cv(m.reach_bars2), bars2_t: rf_reach_crossing_text(m.reach_bars2),
+		eirp_med: m.eirp_med,
+		eirp_t: m.eirp_med === null ? null
+			: `${m.eirp_med.toFixed(1)} (${m.eirp_p25.toFixed(1)}..${m.eirp_p75.toFixed(1)})`,
+		tput_med: m.tput_med,
+		tput_t: m.tput_med === null ? null : m.tput_med.toFixed(0),
+		slope: m.slope,
+		slope_t: m.slope === null ? null
+			: `${m.slope.toFixed(2)}${m.slope_ok === false ? ' [!]' : ''}`,
+		slope_ok: m.slope_ok
+	}));
+	const { key, asc } = rf_reach_table_sort;
+	const dir = asc ? 1 : -1;
+	data.sort((a, b) => {
+		const va = a[key];
+		const vb = b[key];
+		if (va === null && vb === null) return a.rank - b.rank;
+		if (va === null) return 1;
+		if (vb === null) return -1;
+		if (typeof va === 'string') return dir * va.localeCompare(vb);
+		return dir * (va - vb);
+	});
+	container.textContent = '';
+	const table = document.createElement('table');
+	table.className = 'rf-reach-table';
+	const thead = document.createElement('thead');
+	const head_row = document.createElement('tr');
+	for (const col of RF_REACH_TABLE_COLUMNS) {
+		const th = document.createElement('th');
+		th.textContent = col.label + (key === col.key ? (asc ? ' ▴' : ' ▾') : '');
+		th.addEventListener('click', () => {
+			rf_reach_table_sort = {
+				key: col.key,
+				asc: key === col.key ? !asc : !col.numeric
+			};
+			rf_reach_leaderboard_table_render(container, metrics);
+		});
+		head_row.appendChild(th);
+	}
+	thead.appendChild(head_row);
+	const tbody = document.createElement('tbody');
+	for (const d of data) {
+		const tr = document.createElement('tr');
+		const cells = [
+			d.rank, d.product, d.band, `${Math.round(d.bw_mhz)}`, d.n_steps,
+			d.reach10_t, d.reach100_t, d.bars2_t, d.eirp_t, d.tput_t, d.slope_t
+		];
+		cells.forEach((c, ci) => {
+			const td = document.createElement('td');
+			td.textContent = c === null || c === undefined ? '—' : String(c);
+			if (ci === 1) {
+				const dot = document.createElement('span');
+				dot.className = 'rf-table-dot';
+				dot.style.background = rf_reach_product_style(d.product).color;
+				td.prepend(dot);
+			}
+			if (ci === 10 && d.slope_ok === false) td.classList.add('rf-slope-bad');
+			tr.appendChild(td);
+		});
+		tbody.appendChild(tr);
+	}
+	table.append(thead, tbody);
+	container.appendChild(table);
+}
+
+function rf_reach_csv_escape(value) {
+	const s = value === null || value === undefined ? '' : String(value);
+	if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+	return s;
+}
+
+function rf_reach_summary_csv_build() {
+	const cached = rf_reach_cached_context;
+	if (!cached || !cached.metrics) return null;
+	const rvr = rf_reach_filter_rvr(rf_reach_band_filter_apply(cached.normalized));
+	const dev_key = (s) => `${s.model_label}|${s.unii_band}|${s.bw_mhz}`;
+	const eirp_dev = new Map(rf_reach_eirp_deviation_compute(rvr).map(s => [dev_key(s), s]));
+	const tput_dev = new Map(rf_reach_tput_deviation_compute(rvr).map(s => [dev_key(s), s]));
+	const header = [
+		'product', 'vendor', 'model', 'unii_band', 'bw_mhz', 'n_steps',
+		'reach10_db', 'reach10_censored', 'reach100_db', 'reach100_censored',
+		'bars2_db', 'bars2_censored',
+		'eirp_med_dbm', 'eirp_p25_dbm', 'eirp_p75_dbm', 'eirp_dev_db',
+		'tput_med_mbps', 'tput_dev_mbps', 'rssi_slope', 'slope_ok'
+	];
+	const lines = [header.join(',')];
+	const num = (v, dec) => v === null || v === undefined ? '' : v.toFixed(dec);
+	for (const m of cached.metrics.values()) {
+		if (!rf_reach_active_bands.has(m.unii_band)) continue;
+		const k = `${m.label}|${m.unii_band}|${m.bw_mhz}`;
+		const ed = eirp_dev.get(k);
+		const td = tput_dev.get(k);
+		lines.push([
+			rf_reach_csv_escape(m.label), rf_reach_csv_escape(m.vendor), rf_reach_csv_escape(m.model),
+			m.unii_band, m.bw_mhz, m.n_steps,
+			m.reach10 ? m.reach10.atten.toFixed(2) : '', m.reach10 ? m.reach10.censored : '',
+			m.reach100 ? m.reach100.atten.toFixed(2) : '', m.reach100 ? m.reach100.censored : '',
+			m.reach_bars2 ? m.reach_bars2.atten.toFixed(2) : '', m.reach_bars2 ? m.reach_bars2.censored : '',
+			num(m.eirp_med, 2), num(m.eirp_p25, 2), num(m.eirp_p75, 2),
+			ed ? ed.deviation.toFixed(2) : '',
+			num(m.tput_med, 1),
+			td ? td.deviation.toFixed(1) : '',
+			num(m.slope, 3),
+			m.slope_ok === null ? '' : m.slope_ok
+		].join(','));
+	}
+	return lines.join('\n') + '\n';
+}
+
+function rf_reach_summary_csv_download() {
+	const csv = rf_reach_summary_csv_build();
+	if (!csv) return;
+	const blob = new Blob([csv], { type: 'text/csv' });
+	const a = document.createElement('a');
+	a.href = URL.createObjectURL(blob);
+	a.download = 'qualifi-rf-reach-metrics.csv';
+	a.click();
+	URL.revokeObjectURL(a.href);
+}
+
+const RF_REACH_HEATMAP_CSV_IDS = new Set([
+	'rssiHeatmapDiv', 'tputHeatmapDiv', 'iphoneBarsDiv', 'iphoneBarsRotationDiv'
+]);
+
+function rf_reach_block_png_download(chart_container) {
+	const plots = Array.from(chart_container.querySelectorAll('.js-plotly-plot'));
+	plots.reduce((chain, div, i) => chain.then(() =>
+		Plotly.downloadImage(div, {
+			format: 'png',
+			scale: 2,
+			filename: `qualifi-rf-${chart_container.id}-${i + 1}`
+		}).catch(() => {})
+	), Promise.resolve());
+}
+
+// Generic pivot CSV straight from the rendered heatmap traces, so every
+// heatmap value is reachable without hovering.
+function rf_reach_block_csv_download(chart_container) {
+	const plots = Array.from(chart_container.querySelectorAll('.js-plotly-plot'));
+	const lines = [];
+	for (const div of plots) {
+		const trace = div.data && div.data.find(t => t.type === 'heatmap');
+		if (!trace) continue;
+		const title = (div.layout && div.layout.title && div.layout.title.text) || '';
+		lines.push(rf_reach_csv_escape(title));
+		lines.push(['product', ...trace.x].join(','));
+		const y_labels = (div.layout && div.layout.yaxis && div.layout.yaxis.ticktext) || trace.y;
+		trace.z.forEach((row, ri) => {
+			lines.push([
+				rf_reach_csv_escape(String(y_labels[ri]).trim()),
+				...row.map(v => v === null || v === undefined ? '' : v)
+			].join(','));
+		});
+		lines.push('');
+	}
+	if (lines.length === 0) return;
+	const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+	const a = document.createElement('a');
+	a.href = URL.createObjectURL(blob);
+	a.download = `qualifi-rf-${chart_container.id}.csv`;
+	a.click();
+	URL.revokeObjectURL(a.href);
+}
+
+function rf_reach_export_buttons_init() {
+	document.querySelectorAll('#crossReportPanel .cross-report-chart-block').forEach(block => {
+		if (block.dataset.exportInit === '1') return;
+		block.dataset.exportInit = '1';
+		const head = block.querySelector('.cross-report-chart-head');
+		const chart = block.querySelector('.cross-report-chart');
+		if (!head || !chart) return;
+		const wrap = document.createElement('div');
+		wrap.className = 'rf-export-btns';
+		const png = document.createElement('button');
+		png.type = 'button';
+		png.className = 'rf-export-btn';
+		png.textContent = 'PNG';
+		png.title = 'Download this chart as PNG (one file per facet)';
+		png.addEventListener('click', () => rf_reach_block_png_download(chart));
+		wrap.appendChild(png);
+		if (RF_REACH_HEATMAP_CSV_IDS.has(chart.id)) {
+			const csv = document.createElement('button');
+			csv.type = 'button';
+			csv.className = 'rf-export-btn';
+			csv.textContent = 'CSV';
+			csv.title = 'Download the heatmap values as CSV';
+			csv.addEventListener('click', () => rf_reach_block_csv_download(chart));
+			wrap.appendChild(csv);
+		}
+		head.appendChild(wrap);
+	});
+}
+
 function rf_reach_status_render(div, counts, notes) {
 	div.textContent = '';
 	const stats = [
@@ -1759,6 +2239,11 @@ function rf_reach_render_cached() {
 		polar: polar_rows.length,
 	}, notes);
 
+	const metrics = rf_reach_cached_context.metrics || new Map();
+	rf_reach_summary_tiles_render(document.getElementById('rfReachTiles'), metrics);
+	chart_reach_leaderboard_render(document.getElementById('reachLeaderboardDiv'), metrics);
+	rf_reach_leaderboard_table_render(document.getElementById('reachLeaderboardTable'), metrics);
+	rf_reach_leaderboard_view_set(rf_reach_leaderboard_view);
 	chart_rssi_heatmap_render(document.getElementById('rssiHeatmapDiv'), rvr_rows);
 	chart_tput_heatmap_render(document.getElementById('tputHeatmapDiv'), rvr_rows);
 	chart_iphone_bars_render(document.getElementById('iphoneBarsDiv'), rvr_rows);
@@ -1771,6 +2256,7 @@ function rf_reach_render_cached() {
 
 function rf_reach_render() {
 	rf_reach_band_filter_init();
+	rf_reach_export_buttons_init();
 	const status_div = document.getElementById('crossReportStatus');
 	const { paths, local_count } = rf_reach_paths_collect();
 	const base_notes = rf_reach_status_notes_collect(local_count, 0);

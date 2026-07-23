@@ -255,15 +255,33 @@
 						<div class="cross-report-status-row" id="crossReportStatus"></div>
 					</div>
 					<div class="cross-report-header-right">
+						<button class="btn-small" onclick="rf_reach_summary_csv_download()" title="Download the per-product reach metrics as CSV">Export CSV</button>
 						<button class="btn-small" onclick="rf_reach_render()" title="Re-fetch and re-render all charts">&#x21bb; Refresh</button>
-						<div class="rf-band-filter" aria-label="Band filters">
-							<span class="rf-band-filter-label">Bands</span>
-							<div class="rf-band-filter-options" id="rfReachBandFilters"></div>
-						</div>
 					</div>
 				</div>
 				<div class="cross-report-beta-banner">
 					<strong>Beta</strong> &mdash; This feature is under active development. Charts and metrics may contain errors. Think for yourself, question authority.
+				</div>
+				<div class="rf-reach-controls">
+					<div class="rf-band-filter" aria-label="Band filters">
+						<span class="rf-band-filter-label">Bands</span>
+						<div class="rf-band-filter-options" id="rfReachBandFilters"></div>
+					</div>
+				</div>
+				<div class="rf-reach-summary">
+					<div id="rfReachTiles" class="rf-tile-row"></div>
+					<div class="cross-report-chart-block">
+						<div class="cross-report-chart-head">
+							<h4>Reach leaderboard<span class="rf-info" tabindex="0" data-tooltip="Which product reaches farthest, per band. Rank metric: interpolated attenuation where the mean boresight throughput crosses 10 Mbps (the same &quot;effective range&quot; notion as the Server Reports stats, upgraded from last-discrete-step to a linear interpolation between the two straddling sweep points). The open dot marks the 100 Mbps crossing (strong-signal reach); the solid dot marks the 10 Mbps crossing (edge reach); the connector spans the fade-out zone between them.&#10;&#10;Products whose sweep ended while still above a threshold show a &ge; prefix (open symbol): their true reach is at least the shown value. Products without throughput columns fall back to the attenuation where mean RSSI crosses -75 dBm (the 2-bars edge), marked in the hover.&#10;&#10;Each band shows its most-populated bandwidth facet (caption carries the BW and product count); every (band, BW) combination remains available in the table view and the CSV export.&#10;&#10;DFS facets are included here (real-world reach is what a user experiences), even though the EIRP deviation math excludes DFS.">i</span></h4>
+							<div class="rf-view-toggle" role="group" aria-label="Leaderboard view">
+								<button type="button" class="rf-view-toggle-btn active" data-view="chart" onclick="rf_reach_leaderboard_view_set('chart')">Chart</button>
+								<button type="button" class="rf-view-toggle-btn" data-view="table" onclick="rf_reach_leaderboard_view_set('table')">Table</button>
+							</div>
+							<p class="cross-report-subtitle">Interpolated attenuation at the 10 Mbps (solid) and 100 Mbps (open) throughput crossings, per band at its most-populated BW. Longer bars reach farther. Table view lists every band/BW facet and metric.</p>
+						</div>
+						<div id="reachLeaderboardDiv" class="cross-report-chart"></div>
+						<div id="reachLeaderboardTable" class="rf-reach-table-wrap" style="display: none;"></div>
+					</div>
 				</div>
 				<div class="cross-report-charts">
 					<div class="cross-report-chart-block">
