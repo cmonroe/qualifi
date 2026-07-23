@@ -134,7 +134,7 @@
 						<span class="tab-icon">⬇</span> Server Reports
 					</button>
 					<button class="tab-button" data-tab="local" onclick="switch_tab('local')">
-						<span class="tab-icon">📁</span> Local Files
+						<span class="tab-icon">▤</span> Local Files
 					</button>
 					<button class="tab-button" data-tab="cross-report" onclick="switch_tab('cross-report')">
 						<span class="tab-icon">▦</span> RF Reach
@@ -170,7 +170,7 @@
 						<div class="file-input-wrapper">
 							<input type="file" id="excelFile" accept=".xlsx,.xls" multiple>
 							<label for="excelFile" class="file-input-label">
-								📊 Click to select Excel files or drag & drop here<br>
+								Click to select Excel files or drag & drop here<br>
 								<span style="font-size: 0.85em; opacity: 0.7;">Load multiple files to compare different devices</span>
 							</label>
 						</div>
@@ -196,8 +196,8 @@
 					<h3>Select Test Configurations to Compare</h3>
 					<div id="filterNotice" style="display: none;">
 						<div id="filter_notice_count"></div>
-						ℹ DUT-TX tests use TX-specific columns (TX BW, TX NSS, TX Mode) when available<br>
-						ℹ DUT-RX tests use RX-specific columns (RX BW, RX NSS, RX Mode) when available
+						DUT-TX tests use TX-specific columns (TX BW, TX NSS, TX Mode) when available<br>
+						DUT-RX tests use RX-specific columns (RX BW, RX NSS, RX Mode) when available
 					</div>
 					<div class="test-options" id="testOptions"></div>
 				</div>
@@ -241,7 +241,12 @@
 			</div>
 
 			<div class="stats-panel" style="display: none;">
-				<h3>Performance Statistics</h3>
+				<h3>Performance Statistics <select id="rangeThresholdSelect" class="range-threshold-select" onchange="range_threshold_change()" title="Throughput threshold for the Effective Range stat">
+					<option value="10">&gt;10 Mbps</option>
+					<option value="25">&gt;25 Mbps</option>
+					<option value="50">&gt;50 Mbps</option>
+					<option value="100">&gt;100 Mbps</option>
+				</select></h3>
 				<div class="stats-grid" id="statsGrid"></div>
 			</div>
 

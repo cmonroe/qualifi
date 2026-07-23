@@ -423,7 +423,8 @@ function export_csv() {
 
 	if (selected_tests.length === 0) return;
 
-	let csv = 'Device,Model,Software Version,Test Configuration,Direction,Band,Mode (0dB),Attenuation (dB),Throughput (Mbps)\n';
+	const csv_escape = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
+	let csv = 'Device,Model,Software Version,Test Configuration,Direction,Band,Mode (0dB),Attenuation (dB),Throughput (Mbps),Angle (deg),Point Mode,Point MCS,Point NSS,Point BW (MHz),Frequency (MHz)\n';
 
 	selected_tests.forEach(test => {
 		const deviceName = test.device_info?.Name || test.file_name;
@@ -433,11 +434,30 @@ function export_csv() {
 		const band = test.band || 'UNK';
 		const mode = test.mode || 'Unknown';
 
-		const sorted_data = [...test.data].sort((a, b) => a.attenuation - b.attenuation);
+		const sorted_data = test.test_type === 'rotation'
+			? test.data
+			: [...test.data].sort((a, b) => a.attenuation - b.attenuation);
 
 		sorted_data.forEach(point => {
-			csv += `"${deviceName}","${model}","${version}","${config}","${test.direction}","${band}","${mode}",`;
-			csv += `${point.attenuation},${point.throughput}\n`;
+			const attenuation = test.test_type === 'rotation' ? '' : point.attenuation;
+			const fields = [
+				deviceName,
+				model,
+				version,
+				config,
+				test.direction,
+				band,
+				mode,
+				attenuation,
+				point.throughput,
+				point.angle,
+				point.mode,
+				point.mcs,
+				point.nss,
+				point.bandwidth,
+				point.frequency
+			];
+			csv += `${fields.map(csv_escape).join(',')}\n`;
 		});
 	});
 
@@ -1307,7 +1327,7 @@ function drawChart(selected_tests) {
 									}
 
 									if (degradations.length > 0) {
-										lines.push(`⚠️ Degraded: ${degradations.join(', ')}`);
+										lines.push(`[!] Degraded: ${degradations.join(', ')}`);
 									}
 								}
 

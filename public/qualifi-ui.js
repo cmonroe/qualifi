@@ -463,7 +463,7 @@ function update_file_list() {
 			<div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
 				<div style="flex: 1;">
 					<div style="display: flex; align-items: center; margin-bottom: 8px;">
-						<strong style="color: #00a0c8; font-size: 1.1em; margin-right: 15px;">
+						<strong style="color: var(--accent-primary); font-size: 1.1em; margin-right: 15px;">
 							${primaryLabel}
 						</strong>
 						<span style="color: #888; font-size: 0.9em;">
@@ -720,7 +720,7 @@ function update_test_options() {
 		txColumn.className = 'test-column tx-column';
 		const txHeader = document.createElement('div');
 		txHeader.className = 'test-column-header';
-		txHeader.innerHTML = '📥 DUT-TX Tests';
+		txHeader.innerHTML = 'DUT-TX Tests';
 		txColumn.appendChild(txHeader);
 
 		if (txTests.length > 0) {
@@ -738,7 +738,7 @@ function update_test_options() {
 		rxColumn.className = 'test-column rx-column';
 		const rxHeader = document.createElement('div');
 		rxHeader.className = 'test-column-header';
-		rxHeader.innerHTML = '📥 DUT-RX Tests';
+		rxHeader.innerHTML = 'DUT-RX Tests';
 		rxColumn.appendChild(rxHeader);
 
 		if (rxTests.length > 0) {
@@ -803,7 +803,7 @@ function createTestTable(tests, deviceName, startIndex) {
 		bandCell.setAttribute('data-label', 'Band');
 		bandCell.textContent = test.band || 'UNK';
 		bandCell.style.fontWeight = '700';
-		bandCell.style.color = test.band === '2G' ? '#f72585' : test.band === '5G' ? '#00a0c8' : test.band === '6G' ? '#4361ee' : '#888';
+		bandCell.style.color = band_color(test.band);
 		row.appendChild(bandCell);
 
 		const channelCell = document.createElement('td');
@@ -866,17 +866,17 @@ function createTestTable(tests, deviceName, startIndex) {
 			const pdfPath = `${window.QUALIFI_BASE}api/pdf/${server_path}`;
 
 			fileCell.innerHTML = `
-				<a href="${excelPath}" download title="Download Excel Report" style="margin-right: 8px; color: #00a0c8; text-decoration: none;">
-					📊
+				<a href="${excelPath}" download title="Download Excel Report" style="margin-right: 8px; color: var(--accent-primary); text-decoration: none;">
+					<span class="file-badge">XLS</span>
 				</a>
-				<a href="${pdfPath}" download title="Download PDF Report" style="color: #f72585; text-decoration: none;">
-					📄
+				<a href="${pdfPath}" download title="Download PDF Report" style="color: var(--accent-danger); text-decoration: none;">
+					<span class="file-badge">PDF</span>
 				</a>
 			`;
 		} else {
 			fileCell.innerHTML = `
 				<span title="Local file - server downloads not available" style="color: #666;">
-					📁
+					<span class="file-badge">LOCAL</span>
 				</span>
 			`;
 		}
@@ -982,47 +982,168 @@ function formatTestName(test) {
 	return base_name;
 }
 
-function updateStats(selected_tests) {
-	const statsGrid = document.getElementById('statsGrid');
-	statsGrid.innerHTML = '';
+const range_threshold_options = [10, 25, 50, 100];
 
-	let bestMaxRate = 0;
-	let bestAvgRate = 0;
-	let bestRange = 0;
+function range_threshold_get() {
+	const threshold = Number(localStorage['qualifi_range_threshold']);
+	return range_threshold_options.includes(threshold) ? threshold : 10;
+}
 
-	const testStats = selected_tests.map(test => {
-		const throughputs = test.data.map(d => d.throughput).filter(t => t > 0);
-		const maxRate = Math.max(...throughputs);
-		const avgRate = Math.round(throughputs.reduce((a, b) => a + b, 0) / throughputs.length);
+function range_threshold_change() {
+	const select = document.getElementById('rangeThresholdSelect');
+	if (!select) return;
 
-		let effective_range = 0;
-		for (let i = test.data.length - 1; i >= 0; i--) {
-			if (test.data[i].throughput > 10) {
-				effective_range = test.data[i].attenuation;
-				break;
-			}
+	const threshold = Number(select.value);
+	localStorage['qualifi_range_threshold'] = range_threshold_options.includes(threshold) ? threshold : 10;
+	updateChart();
+}
+
+function test_kind_get(test) {
+	return test.test_type === 'rotation' ? 'rotation' : 'rvr';
+}
+
+function throughput_stats_get(test) {
+	const throughputs = test.data.map(point => point.throughput).filter(throughput => throughput > 0);
+	if (throughputs.length === 0) return { max_rate: 0, avg_rate: 0 };
+
+	const max_rate = Math.max(...throughputs);
+	const avg_rate = Math.round(throughputs.reduce((sum, throughput) => sum + throughput, 0) / throughputs.length);
+	return { max_rate, avg_rate };
+}
+
+function range_points_get(test) {
+	if (test.test_type === 'rotation') return [];
+	if (test.test_type !== 'rvr_rotation') {
+		return test.data.map(point => ({ atten: point.attenuation, value: point.throughput }));
+	}
+
+	const values_by_attenuation = new Map();
+	test.data.forEach(point => {
+		if (!values_by_attenuation.has(point.attenuation)) {
+			values_by_attenuation.set(point.attenuation, []);
 		}
-
-		bestMaxRate = Math.max(bestMaxRate, maxRate);
-		bestAvgRate = Math.max(bestAvgRate, avgRate);
-		bestRange = Math.max(bestRange, effective_range);
-
-		return { test, maxRate, avgRate, effective_range };
+		values_by_attenuation.get(point.attenuation).push(point.throughput);
 	});
 
-	testStats.forEach(({ test, maxRate, avgRate, effective_range }) => {
+	return Array.from(values_by_attenuation.entries())
+		.map(([atten, values]) => ({
+			atten,
+			value: values.reduce((sum, value) => sum + value, 0) / values.length
+		}))
+		.sort((first, second) => first.atten - second.atten);
+}
+
+function attenuation_result_get(test, threshold) {
+	const points = range_points_get(test);
+	if (points.length === 0) return null;
+
+	return atten_at_threshold(points, threshold);
+}
+
+function attenuation_result_format(result) {
+	if (!result) return '--';
+	return `${result.censored ? '>=' : ''}${result.atten.toFixed(1)} dB`;
+}
+
+function attenuation_result_compare(first, second) {
+	if (!first) return second ? -1 : 0;
+	if (!second) return 1;
+	if (first.atten !== second.atten) return first.atten - second.atten;
+	return Number(first.censored) - Number(second.censored);
+}
+
+function attenuation_result_best_get(results) {
+	return results.reduce((best_result, result) => {
+		return attenuation_result_compare(result, best_result) > 0 ? result : best_result;
+	}, null);
+}
+
+function attenuation_result_is_best(result, best_result) {
+	return Boolean(result) && attenuation_result_compare(result, best_result) === 0;
+}
+
+function best_chip_get(is_best) {
+	return is_best ? '<span class="best-chip" title="Best in selection">BEST</span>' : '';
+}
+
+function updateStats(selected_tests) {
+	const statsGrid = document.getElementById('statsGrid');
+	const threshold = range_threshold_get();
+	const threshold_select = document.getElementById('rangeThresholdSelect');
+	if (threshold_select) threshold_select.value = String(threshold);
+	statsGrid.innerHTML = '';
+
+	const test_stats = selected_tests.map(test => {
+		const { max_rate, avg_rate } = throughput_stats_get(test);
+		const azimuth_throughputs = test.data.map(point => point.throughput);
+		const min_azimuth = azimuth_throughputs.length > 0 ? Math.min(...azimuth_throughputs) : 0;
+		const mean_azimuth = azimuth_throughputs.length > 0
+			? Math.round(azimuth_throughputs.reduce((sum, throughput) => sum + throughput, 0) / azimuth_throughputs.length)
+			: 0;
+
+		return {
+			test,
+			max_rate,
+			avg_rate,
+			min_azimuth,
+			mean_azimuth,
+			range_threshold: attenuation_result_get(test, threshold),
+			range_100: threshold === 100 ? null : attenuation_result_get(test, 100)
+		};
+	});
+
+	const rvr_stats = test_stats.filter(stat => test_kind_get(stat.test) === 'rvr');
+	const rotation_stats = test_stats.filter(stat => test_kind_get(stat.test) === 'rotation');
+	const best_rvr_max = Math.max(...rvr_stats.map(stat => stat.max_rate));
+	const best_rvr_avg = Math.max(...rvr_stats.map(stat => stat.avg_rate));
+	const best_rotation_max = Math.max(...rotation_stats.map(stat => stat.max_rate));
+	const best_rotation_avg = Math.max(...rotation_stats.map(stat => stat.avg_rate));
+	const best_rotation_min = Math.max(...rotation_stats.map(stat => stat.min_azimuth));
+	const best_rotation_mean = Math.max(...rotation_stats.map(stat => stat.mean_azimuth));
+	const best_range_threshold = attenuation_result_best_get(test_stats.map(stat => stat.range_threshold));
+	const best_range_100 = attenuation_result_best_get(test_stats.map(stat => stat.range_100));
+	const range_candidate_count = test_stats.filter(stat => stat.range_threshold).length;
+	const range_100_candidate_count = test_stats.filter(stat => stat.range_100).length;
+
+	test_stats.forEach(stat => {
+		const { test, max_rate, avg_rate, min_azimuth, mean_azimuth, range_threshold, range_100 } = stat;
 		const card = document.createElement('div');
 		card.className = 'stat-card';
 		const modelName = test.device_info?.['Model Number'] || test.device_info?.Name || test.file_name;
 		const country = test.device_info?.Country || '';
 		const countryText = country ? ` • ${country}` : '';
-
-		const isBestMax = maxRate === bestMaxRate && selected_tests.length > 1;
-		const isBestAvg = avgRate === bestAvgRate && selected_tests.length > 1;
-		const isBestRange = effective_range === bestRange && selected_tests.length > 1;
+		const test_kind = test_kind_get(test);
+		const kind_stats = test_kind === 'rotation' ? rotation_stats : rvr_stats;
+		const is_best_max = kind_stats.length > 1 && max_rate === (test_kind === 'rotation' ? best_rotation_max : best_rvr_max);
+		const is_best_avg = kind_stats.length > 1 && avg_rate === (test_kind === 'rotation' ? best_rotation_avg : best_rvr_avg);
+		const is_best_min = rotation_stats.length > 1 && min_azimuth === best_rotation_min;
+		const is_best_mean = rotation_stats.length > 1 && mean_azimuth === best_rotation_mean;
+		const is_best_range = range_candidate_count > 1 && attenuation_result_is_best(range_threshold, best_range_threshold);
+		const is_best_range_100 = range_100_candidate_count > 1 && attenuation_result_is_best(range_100, best_range_100);
+		const range_suffix = test.test_type === 'rvr_rotation' ? ' (azimuth-averaged)' : '';
+		const range_rows = test_kind === 'rotation'
+			? `
+				<div style="margin-bottom: 10px;">
+					<div class="stat-label">Min over azimuth ${best_chip_get(is_best_min)}</div>
+					<div class="stat-value">${min_azimuth} Mbps</div>
+				</div>
+				<div>
+					<div class="stat-label">Mean over azimuth ${best_chip_get(is_best_mean)}</div>
+					<div class="stat-value">${mean_azimuth} Mbps</div>
+				</div>`
+			: `
+				<div style="margin-bottom: ${threshold === 100 ? '0' : '10'}px;">
+					<div class="stat-label">Effective Range (>${threshold} Mbps)${range_suffix} ${best_chip_get(is_best_range)}</div>
+					<div class="stat-value">${attenuation_result_format(range_threshold)}</div>
+				</div>
+				${threshold === 100 ? '' : `
+				<div>
+					<div class="stat-label">Atten @ 100 Mbps ${best_chip_get(is_best_range_100)}</div>
+					<div class="stat-value">${attenuation_result_format(range_100)}</div>
+				</div>`}`;
 
 		card.innerHTML = `
-			<h4 style="color: #00a0c8; margin-bottom: 15px;">
+			<h4 style="color: var(--accent-primary); margin-bottom: 15px;">
 				${modelName}<br>
 				<span style="font-size: 0.75em; color: #888;">
 					v${test.device_info?.['Software Version'] || 'Unknown'}${countryText}
@@ -1032,17 +1153,14 @@ function updateStats(selected_tests) {
 				</span>
 			</h4>
 			<div style="margin-bottom: 10px;">
-				<div class="stat-label">Max Throughput ${isBestMax ? '🏆' : ''}</div>
-				<div class="stat-value">${maxRate} Mbps</div>
+				<div class="stat-label">Max Throughput ${best_chip_get(is_best_max)}</div>
+				<div class="stat-value">${max_rate} Mbps</div>
 			</div>
 			<div style="margin-bottom: 10px;">
-				<div class="stat-label">Average Throughput ${isBestAvg ? '🏆' : ''}</div>
-				<div class="stat-value">${avgRate} Mbps</div>
+				<div class="stat-label">Average Throughput ${best_chip_get(is_best_avg)}</div>
+				<div class="stat-value">${avg_rate} Mbps</div>
 			</div>
-			<div>
-				<div class="stat-label">Effective Range (>10 Mbps) ${isBestRange ? '🏆' : ''}</div>
-				<div class="stat-value">${effective_range} dB</div>
-			</div>
+			${range_rows}
 		`;
 		statsGrid.appendChild(card);
 	});
@@ -1050,6 +1168,9 @@ function updateStats(selected_tests) {
 
 function updateComparisonTable(selected_tests) {
 	const container = document.getElementById('comparisonTable');
+	const threshold = range_threshold_get();
+	const show_100 = threshold !== 100;
+	const column_count = show_100 ? 10 : 9;
 
 	const configGroups = new Map();
 	selected_tests.forEach(test => {
@@ -1072,35 +1193,33 @@ function updateComparisonTable(selected_tests) {
 	html += '<th>Mode (0dB)</th>';
 	html += '<th>Max Throughput</th>';
 	html += '<th>Avg Throughput</th>';
-	html += '<th>Range (>10Mbps)</th>';
+	html += `<th>Atten @${threshold}M</th>`;
+	if (show_100) html += '<th>Atten @100M</th>';
 	html += '</tr></thead>';
 	html += '<tbody>';
 
 	configGroups.forEach((tests, config) => {
-		const maxThroughputs = tests.map(t => Math.max(...t.data.map(d => d.throughput)));
-		const bestMaxThroughput = Math.max(...maxThroughputs);
-
-		const ranges = tests.map(t => {
-			for (let i = t.data.length - 1; i >= 0; i--) {
-				if (t.data[i].throughput > 10) {
-					return t.data[i].attenuation;
-				}
-			}
-			return 0;
-		});
-		const bestRange = Math.max(...ranges);
+		const max_throughputs = tests.map(test => throughput_stats_get(test).max_rate);
+		const best_max_throughput = Math.max(...max_throughputs);
+		const range_thresholds = tests.map(test => attenuation_result_get(test, threshold));
+		const range_100s = show_100 ? tests.map(test => attenuation_result_get(test, 100)) : [];
+		const best_range_threshold = attenuation_result_best_get(range_thresholds);
+		const best_range_100 = show_100 ? attenuation_result_best_get(range_100s) : null;
 
 		tests.forEach((test, index) => {
 			const deviceName = test.device_info?.['Model Number'] || test.device_info?.Name || test.file_name;
 			const softwareVersion = test.device_info?.['Software Version'] || 'Unknown';
 			const country = test.device_info?.Country || '';
-			const throughputs = test.data.map(d => d.throughput).filter(t => t > 0);
-			const maxRate = Math.max(...throughputs);
-			const avgRate = Math.round(throughputs.reduce((a, b) => a + b, 0) / throughputs.length);
-			const range = ranges[index];
+			const { max_rate, avg_rate } = throughput_stats_get(test);
+			const range_threshold = range_thresholds[index];
+			const range_100 = range_100s[index];
 			const band = test.band || 'UNK';
+			const fixed_attenuation = test.test_type === 'rotation';
+			const range_threshold_display = fixed_attenuation ? '—' : attenuation_result_format(range_threshold);
+			const range_100_display = fixed_attenuation ? '—' : attenuation_result_format(range_100);
+			const range_title = fixed_attenuation ? ' title="Not applicable: rotation test at fixed attenuation"' : '';
 
-			const bandColor = band === '2G' ? '#f72585' : band === '5G' ? '#00a0c8' : band === '6G' ? '#4361ee' : '#888';
+			const bandColor = band_color(band);
 
 			html += '<tr>';
 			if (index === 0) {
@@ -1111,9 +1230,10 @@ function updateComparisonTable(selected_tests) {
 			html += `<td data-label="Country">${country}</td>`;
 			html += `<td data-label="Band" style="color: ${bandColor}; font-weight: 700;">${band}</td>`;
 			html += `<td data-label="Mode (0dB)">${test.mode || 'Unknown'}</td>`;
-			html += `<td data-label="Max Throughput" class="${maxRate === bestMaxThroughput ? 'best-value' : ''}">${maxRate} Mbps</td>`;
-			html += `<td data-label="Avg Throughput">${avgRate} Mbps</td>`;
-			html += `<td data-label="Range (>10Mbps)" class="${range === bestRange ? 'best-value' : ''}">${range} dB</td>`;
+			html += `<td data-label="Max Throughput" class="${max_rate === best_max_throughput ? 'best-value' : ''}">${max_rate} Mbps</td>`;
+			html += `<td data-label="Avg Throughput">${avg_rate} Mbps</td>`;
+			html += `<td data-label="Atten @${threshold}M" class="${attenuation_result_is_best(range_threshold, best_range_threshold) ? 'best-value' : ''}"${range_title}>${range_threshold_display}</td>`;
+			if (show_100) html += `<td data-label="Atten @100M" class="${attenuation_result_is_best(range_100, best_range_100) ? 'best-value' : ''}"${range_title}>${range_100_display}</td>`;
 			html += '</tr>';
 
 			mobileHtml += `
@@ -1142,21 +1262,26 @@ function updateComparisonTable(selected_tests) {
 					</div>
 					<div class="mobile-card-item">
 						<div class="mobile-card-label">Max Throughput</div>
-						<div class="mobile-card-value ${maxRate === bestMaxThroughput ? 'best-value' : ''}">${maxRate} Mbps</div>
+						<div class="mobile-card-value ${max_rate === best_max_throughput ? 'best-value' : ''}">${max_rate} Mbps</div>
 					</div>
 					<div class="mobile-card-item">
 						<div class="mobile-card-label">Avg Throughput</div>
-						<div class="mobile-card-value">${avgRate} Mbps</div>
+						<div class="mobile-card-value">${avg_rate} Mbps</div>
 					</div>
 					<div class="mobile-card-item">
-						<div class="mobile-card-label">Range (>10Mbps)</div>
-						<div class="mobile-card-value ${range === bestRange ? 'best-value' : ''}">${range} dB</div>
+						<div class="mobile-card-label">Atten @${threshold}M</div>
+						<div class="mobile-card-value ${attenuation_result_is_best(range_threshold, best_range_threshold) ? 'best-value' : ''}"${range_title}>${range_threshold_display}</div>
 					</div>
+					${show_100 ? `
+					<div class="mobile-card-item">
+						<div class="mobile-card-label">Atten @100M</div>
+						<div class="mobile-card-value ${attenuation_result_is_best(range_100, best_range_100) ? 'best-value' : ''}"${range_title}>${range_100_display}</div>
+					</div>` : ''}
 				</div>
 			</div>`;
 		});
 
-		html += '<tr style="height: 10px;"><td colspan="9" style="border: none;"></td></tr>';
+		html += `<tr style="height: 10px;"><td colspan="${column_count}" style="border: none;"></td></tr>`;
 	});
 
 	html += '</tbody></table>';

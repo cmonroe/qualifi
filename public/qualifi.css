@@ -2070,6 +2070,50 @@ main {
 	border-radius: 2px;
 }
 
+.range-threshold-select {
+	margin-left: var(--space-sm);
+	padding: 4px 8px;
+	background-color: var(--bg-secondary);
+	border: 1px solid var(--border-default);
+	border-radius: 6px;
+	color: var(--text-primary);
+	font-family: var(--mono-font);
+	font-size: 0.75rem;
+	font-weight: var(--font-weight-medium);
+	text-transform: none;
+	letter-spacing: normal;
+	vertical-align: middle;
+	cursor: pointer;
+}
+
+.range-threshold-select:focus {
+	outline: none;
+	border-color: var(--accent-cyan);
+}
+
+.best-chip,
+.file-badge {
+	display: inline-block;
+	padding: 2px 5px;
+	border-radius: 4px;
+	font-family: var(--mono-font);
+	font-size: 0.625rem;
+	font-weight: var(--font-weight-bold);
+	line-height: 1;
+	letter-spacing: 0.08em;
+	vertical-align: 1px;
+}
+
+.best-chip {
+	margin-left: var(--space-xs);
+	background-color: var(--accent-success-dim);
+	color: var(--accent-success);
+}
+
+.file-badge {
+	border: 1px solid currentColor;
+}
+
 /* Print Styles */
 @media print {
 	body {
