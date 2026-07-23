@@ -136,17 +136,17 @@
 
 	/* Chart series palette — categorical, fixed slot order, never cycled.
 	   CVD-validated (dataviz validator) against chart surfaces #141414 and
-	   #1f1f1f: worst adjacent CVD dE 8.4, normal-vision dE 19.3, all slots
+	   #1f1f1f: worst adjacent CVD dE 8.4, normal-vision dE 19.8, all slots
 	   >= 3:1 contrast. Re-run the validator before changing any slot:
 	     node <dataviz-skill>/scripts/validate_palette.js \
 	       "<slot1,...,slot8>" --mode dark --surface "#141414" */
 	--chart-cat-1: #00a0c8;   /* teal (original qualifi Adtran accent) */
-	--chart-cat-2: #d95926;   /* orange  */
-	--chart-cat-3: #199e70;   /* aqua    */
-	--chart-cat-4: #c98500;   /* yellow  */
-	--chart-cat-5: #d55181;   /* magenta */
-	--chart-cat-6: #008300;   /* green   */
-	--chart-cat-7: #9085e9;   /* violet  */
+	--chart-cat-2: #f72585;   /* pink (original qualifi bright pink) */
+	--chart-cat-3: #c98500;   /* yellow  */
+	--chart-cat-4: #199e70;   /* aqua    */
+	--chart-cat-5: #d95926;   /* orange  */
+	--chart-cat-6: #9085e9;   /* violet  */
+	--chart-cat-7: #008300;   /* green   */
 	--chart-cat-8: #e66767;   /* red     */
 	--chart-cat-overflow: #8a8a8a;
 

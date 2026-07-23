@@ -34,12 +34,12 @@ function chart_palette() {
 function categorical_palette() {
 	return [
 		get_css_var('--chart-cat-1', '#00a0c8'),
-		get_css_var('--chart-cat-2', '#d95926'),
-		get_css_var('--chart-cat-3', '#199e70'),
-		get_css_var('--chart-cat-4', '#c98500'),
-		get_css_var('--chart-cat-5', '#d55181'),
-		get_css_var('--chart-cat-6', '#008300'),
-		get_css_var('--chart-cat-7', '#9085e9'),
+		get_css_var('--chart-cat-2', '#f72585'),
+		get_css_var('--chart-cat-3', '#c98500'),
+		get_css_var('--chart-cat-4', '#199e70'),
+		get_css_var('--chart-cat-5', '#d95926'),
+		get_css_var('--chart-cat-6', '#9085e9'),
+		get_css_var('--chart-cat-7', '#008300'),
 		get_css_var('--chart-cat-8', '#e66767')
 	];
 }
@@ -121,12 +121,12 @@ const BARS_COLORS = ['#2c2c2a', '#d03b3b', '#fab219', '#0ca30c'];
 
 const SLOT_SHADES = [
 	['#00a0c8', '#40b8d6', '#73cbe1', '#007d9c'],
-	['#d95926', '#e3835c', '#eaa488', '#a9451e'],
-	['#199e70', '#53b694', '#81cab0', '#147b57'],
+	['#f72585', '#f95ca4', '#fb87bc', '#c11d68'],
 	['#c98500', '#d7a440', '#e1bc73', '#9d6800'],
-	['#d55181', '#e07da1', '#e89fba', '#a63f65'],
-	['#008300', '#40a240', '#73bb73', '#006600'],
+	['#199e70', '#53b694', '#81cab0', '#147b57'],
+	['#d95926', '#e3835c', '#eaa488', '#a9451e'],
 	['#9085e9', '#aca4ef', '#c2bcf3', '#7068b6'],
+	['#008300', '#40a240', '#73bb73', '#006600'],
 	['#e66767', '#ec8d8d', '#f1abab', '#b35050']
 ];
 
