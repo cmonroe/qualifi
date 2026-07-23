@@ -335,11 +335,11 @@ const server = http.createServer((req, res) => {
 		return;
 	}
 
-	// API endpoint: read text-csv-0.csv for one or more test directories and return
-	// the columns needed by the Cross-Report Analysis tab (RSSI heatmap, iPhone bars
-	// heatmap, EIRP-proxy deviation). Mirrors the parsing done by
-	// qualifi/tools/rf_reach_analysis/ingest.py::test_dir_parse for the subset of
-	// columns those three charts depend on.
+	// API endpoint: read text-csv-0.csv for one or more test directories and
+	// return the raw per-sample columns the RF Reach tab charts on (RSSI,
+	// atten, rotation, throughput, frequency/bandwidth). All aggregation and
+	// classification beyond the coarse band happens client-side in
+	// qualifi-rf-reach.js.
 	if (pathname === '/api/rf-reach-data') {
 		const search_params = new URLSearchParams(parsed_url.query);
 		const paths_param = search_params.get('paths') || '';
