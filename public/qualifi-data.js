@@ -48,24 +48,6 @@ function count_model_test_configs(model_data) {
 	return count;
 }
 
-function count_vendor_files(vendor_data) {
-	let count = 0;
-	Object.values(vendor_data.models).forEach(model_data => {
-		Object.values(model_data.versions).forEach(version_data => {
-			count += Object.keys(version_data.test_configs || {}).length;
-		});
-	});
-	return count;
-}
-
-function count_model_files(model_data) {
-	let count = 0;
-	Object.values(model_data.versions).forEach(version_data => {
-		count += Object.keys(version_data.test_configs || {}).length;
-	});
-	return count;
-}
-
 async function load_server_reports() {
 	try {
 		const response = await fetch(window.QUALIFI_BASE + 'api/reports');
@@ -103,111 +85,45 @@ async function search_reports(query) {
 }
 
 function compare_versions(a, b) {
-	const parts_a = a.split('.').map(num => parseInt(num) || 0);
-	const parts_b = b.split('.').map(num => parseInt(num) || 0);
+	const version_tokens = version => (String(version).match(/\d+|[a-zA-Z]+/g) || [])
+		.map(token => /^\d+$/.test(token) ? Number(token) : token.toLowerCase());
+	const tokens_a = version_tokens(a);
+	const tokens_b = version_tokens(b);
+	const shared_length = Math.min(tokens_a.length, tokens_b.length);
 
-	for (let i = 0; i < Math.max(parts_a.length, parts_b.length); i++) {
-		const num_a = parts_a[i] || 0;
-		const num_b = parts_b[i] || 0;
+	for (let index = 0; index < shared_length; index++) {
+		const token_a = tokens_a[index];
+		const token_b = tokens_b[index];
 
-		if (num_a !== num_b) {
-			return num_a - num_b;
-		}
-	}
-
-	return 0;
-}
-
-async function load_selected_reports() {
-	if (selected_server_reports.size === 0) {
-		console.log('No reports selected');
-		return;
-	}
-
-	console.log('Loading selected reports:', Array.from(selected_server_reports));
-
-	const loading_msg = document.createElement('div');
-	loading_msg.className = 'loading';
-	loading_msg.textContent = 'Loading reports from server...';
-	document.body.appendChild(loading_msg);
-
-	is_batch_loading = true;
-
-	try {
-		let loaded_count = 0;
-
-		for (const report_id of selected_server_reports) {
-			console.log('Processing report_id:', report_id);
-
-			const [vendor, model, version] = report_id.split('|');
-
-			if (!vendor || !model || !version) {
-				console.error('Invalid report_id format:', report_id);
-				continue;
-			}
-
-			const version_data = server_reports?.vendors?.[vendor]?.models?.[model]?.versions?.[version];
-			if (!version_data || !version_data.test_configs) {
-				console.error('Version data not found for:', report_id);
-				continue;
-			}
-
-			console.log('Found test configs:', Object.keys(version_data.test_configs));
-
-			for (const [test_config, test_config_data] of Object.entries(version_data.test_configs)) {
-				console.log(`Loading test config: ${test_config}`, test_config_data);
-
-				try {
-					const response = await fetch(`${window.QUALIFI_BASE}reports/${test_config_data.path}`);
-					if (!response.ok) {
-						console.error(`Failed to fetch ${test_config_data.path}: ${response.status}`);
-						continue;
-					}
-
-					const blob = await response.blob();
-					const file_name = `${vendor}_${model}_v${version}_${test_config}_${test_config_data.name}`;
-					const virtualFile = new File([blob], file_name, { type: blob.type });
-
-					await load_excel_file(virtualFile, true, test_config_data.path);
-					loaded_count++;
-					console.log(`Successfully loaded: ${file_name}`);
-
-				} catch (fetchError) {
-					console.error(`Error loading test config ${test_config}:`, fetchError);
-				}
-			}
+		if (token_a === token_b) {
+			continue;
 		}
 
-		console.log(`Loaded ${loaded_count} test configuration files`);
-
-		selected_server_reports.clear();
-		update_selected_reports_list();
-
-		document.querySelectorAll('.version-checkbox:checked').forEach(cb => {
-			cb.checked = false;
-		});
-
-		is_batch_loading = false;
-		update_file_list();
-		update_test_options();
-
-		if (loaded_files.size > 0) {
-			show_success(`Successfully loaded ${loaded_count} test configurations from server`);
-
-			setTimeout(() => {
-				document.querySelector('.test-selector').scrollIntoView({ behavior: 'smooth' });
-			}, 100);
-		} else {
-			show_error('No valid test configurations were loaded');
+		if (typeof token_a === 'number' && typeof token_b === 'number') {
+			return token_a - token_b;
 		}
 
-	} catch (error) {
-		console.error('Error loading reports:', error);
-		show_error(`Failed to load reports from server: ${error.message}`);
-	} finally {
-		is_batch_loading = false;
-		loading_msg.remove();
+		if (typeof token_a === 'string' && typeof token_b === 'string') {
+			return token_a < token_b ? -1 : 1;
+		}
+
+		return typeof token_a === 'number' ? 1 : -1;
 	}
+
+	if (tokens_a.length === tokens_b.length) {
+		return 0;
+	}
+
+	const a_is_longer = tokens_a.length > tokens_b.length;
+	const next_token = a_is_longer ? tokens_a[shared_length] : tokens_b[shared_length];
+
+	// A textual suffix marks a pre-release: 26.1-rc1 < 26.1 < 26.1.1.
+	if (typeof next_token === 'string') {
+		return a_is_longer ? -1 : 1;
+	}
+
+	// Numeric date suffixes remain ordered numerically: 26.1-202605 < 26.1-202606.
+	return a_is_longer ? 1 : -1;
 }
 
 function initialize_local_file_upload() {
@@ -311,6 +227,7 @@ async function load_excel_file(file, from_server = false, server_path = null, su
 		loaded_files.set(file_key, {
 			device_info: device_info,
 			rvr_data: rvr_data,
+			skipped_count: skipped_count,
 			file_name: file_key,
 			from_server: from_server,
 			server_path: server_path

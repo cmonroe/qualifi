@@ -195,7 +195,7 @@
 				<div class="test-selector" style="display: none;">
 					<h3>Select Test Configurations to Compare</h3>
 					<div id="filterNotice" style="display: none;">
-						⚠ Invalid data points (channel=0 or throughput=0) have been automatically filtered out<br>
+						<div id="filter_notice_count"></div>
 						ℹ DUT-TX tests use TX-specific columns (TX BW, TX NSS, TX Mode) when available<br>
 						ℹ DUT-RX tests use RX-specific columns (RX BW, RX NSS, RX Mode) when available
 					</div>
@@ -222,13 +222,6 @@
 						<label>Select Angles to Display:</label>
 						<div id="angleCheckboxes" class="angle-checkbox-group"></div>
 					</div>
-				</div>
-
-				<div class="attenuation-filter" id="attenuationFilter" style="display: none;">
-					<label for="attenuationSelect">Compare at attenuation level:</label>
-					<select id="attenuationSelect" onchange="update_rotation_chart()">
-						<option value="">All angles (default view)</option>
-					</select>
 				</div>
 
 				<div class="polar-attenuation-slider" id="polarAttenuationSlider" style="display: none;">
@@ -352,6 +345,7 @@
 		<div class="version">QualiFi v0.9.2</div>
 	</footer>
 
+	<script src="qualifi-theme.js"></script>
 	<script src="qualifi-data.js"></script>
 	<script src="qualifi-ui.js"></script>
 	<script src="qualifi-charts.js"></script>

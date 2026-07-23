@@ -594,7 +594,18 @@ function clear_local_files() {
 
 function update_test_options() {
 	const container = document.getElementById('testOptions');
+	const filter_notice = document.getElementById('filterNotice');
+	const filter_notice_count = document.getElementById('filter_notice_count');
+	const skipped_count = Array.from(loaded_files.values())
+		.reduce((total, file_data) => total + (file_data.skipped_count || 0), 0);
 	container.innerHTML = '';
+
+	if (skipped_count > 0) {
+		filter_notice.style.display = 'block';
+		filter_notice_count.textContent = `${skipped_count} invalid data points (channel=0 or throughput=0) filtered across ${loaded_files.size} files`;
+	} else {
+		filter_notice.style.display = 'none';
+	}
 
 	if (loaded_files.size === 0) {
 		document.querySelector('.test-selector').style.display = 'none';

@@ -133,6 +133,28 @@
 	--tx-color: #0080ff;
 	--rx-color: #ff3b30;
 
+	/* Chart series palette — categorical, fixed slot order, never cycled.
+	   CVD-validated (dataviz validator) against chart surfaces #141414 and
+	   #1f1f1f: worst adjacent CVD dE 8.4, normal-vision dE 19.3, all slots
+	   >= 3:1 contrast. Re-run the validator before changing any slot:
+	     node <dataviz-skill>/scripts/validate_palette.js \
+	       "<slot1,...,slot8>" --mode dark --surface "#141414" */
+	--chart-cat-1: #3987e5;   /* blue    */
+	--chart-cat-2: #d95926;   /* orange  */
+	--chart-cat-3: #199e70;   /* aqua    */
+	--chart-cat-4: #c98500;   /* yellow  */
+	--chart-cat-5: #d55181;   /* magenta */
+	--chart-cat-6: #008300;   /* green   */
+	--chart-cat-7: #9085e9;   /* violet  */
+	--chart-cat-8: #e66767;   /* red     */
+	--chart-cat-overflow: #8a8a8a;
+
+	/* Diverging pair for deviation charts: warm/cool poles, neutral for
+	   near-zero deviations so noise does not scream a sign. */
+	--chart-div-pos: #3987e5;
+	--chart-div-neg: #e66767;
+	--chart-div-neutral: #898781;
+
 	/* Shadows */
 	--shadow: 0 1px 3px rgba(0, 0, 0, 0.40);
 	--shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.50);
@@ -876,44 +898,6 @@ main {
 	accent-color: var(--accent-cyan);
 }
 
-/* Chart.js Tooltip Styling */
-.chartjs-tooltip {
-	opacity: 1 !important;
-	position: absolute;
-	background: var(--bg-tooltip) !important;
-	border: 1px solid var(--border-default) !important;
-	border-radius: 6px !important;
-	color: var(--text-primary) !important;
-	font-family: var(--mono-font) !important;
-	font-size: 0.8125rem !important;
-	padding: var(--space-sm) !important;
-	pointer-events: none !important;
-	transform: translate(-50%, 0) !important;
-	transition: all var(--transition-fast) ease !important;
-	box-shadow: var(--shadow-lg) !important;
-	max-width: 400px !important;
-}
-
-/* Tooltip color boxes and labels */
-.chartjs-tooltip-key {
-	display: inline-block !important;
-	width: 12px !important;
-	height: 12px !important;
-	margin-right: var(--space-xs) !important;
-	border-radius: 2px !important;
-	vertical-align: middle !important;
-}
-
-.chartjs-tooltip-body {
-	line-height: 1.5 !important;
-}
-
-.chartjs-tooltip-body-item {
-	display: flex !important;
-	align-items: flex-start !important;
-	margin-bottom: 4px !important;
-}
-
 /* Chart Container — outer container */
 .chart-container {
 	background-color: var(--bg-secondary);
@@ -1019,44 +1003,6 @@ main {
 #angleSelect option:checked {
 	background-color: var(--accent-cyan);
 	color: var(--bg-primary);
-}
-
-.attenuation-filter {
-	background-color: var(--bg-elevated);
-	border: 1px solid var(--border-subtle);
-	border-radius: 8px;
-	padding: var(--space-md);
-	margin-bottom: var(--space-lg);
-	display: flex;
-	align-items: center;
-	gap: var(--space-md);
-}
-
-.attenuation-filter label {
-	font-family: var(--mono-font);
-	font-weight: var(--font-weight-medium);
-	font-size: 0.6875rem;
-	color: var(--text-tertiary);
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
-	white-space: nowrap;
-}
-
-.attenuation-filter select {
-	flex: 1;
-	padding: 8px 12px;
-	background-color: var(--bg-secondary);
-	border: 1px solid var(--border-default);
-	border-radius: 6px;
-	color: var(--text-primary);
-	font-family: var(--mono-font);
-	font-size: 0.875rem;
-	cursor: pointer;
-}
-
-.attenuation-filter select:focus {
-	outline: none;
-	border-color: var(--accent-cyan);
 }
 
 .chart-wrapper {

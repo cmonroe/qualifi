@@ -1,36 +1,3 @@
-// Resolve a CSS custom property from <html> at call time. Used to keep chart
-// colors/fonts in sync with the qualifi.css design tokens after the font
-// loader IIFE finishes (--mono-font in particular changes between Berkeley
-// Mono and IBM Plex Mono depending on what is installed on the server).
-function get_css_var(name, fallback) {
-	const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-	return value || fallback || '';
-}
-
-function chart_font_family() {
-	return get_css_var('--mono-font', "'IBM Plex Mono', 'SF Mono', monospace");
-}
-
-function chart_palette() {
-	return {
-		text_primary: get_css_var('--text-primary', '#ffffff'),
-		text_secondary: get_css_var('--text-secondary', '#a0a0a0'),
-		text_tertiary: get_css_var('--text-tertiary', '#707070'),
-		grid: get_css_var('--border-subtle', '#2a2a2a'),
-		axis_line: get_css_var('--border-default', '#333333'),
-		tooltip_bg: get_css_var('--bg-tooltip', '#1f1f1f'),
-		tooltip_border: get_css_var('--border-default', '#333333'),
-		tx: get_css_var('--tx-color', '#0080ff'),
-		rx: get_css_var('--rx-color', '#ff3b30'),
-		cyan: get_css_var('--accent-cyan', '#0080ff'),
-		green: get_css_var('--accent-success', '#00c896'),
-		amber: get_css_var('--accent-warning', '#ff9500'),
-		red: get_css_var('--accent-danger', '#ff3b30'),
-		blue: get_css_var('--accent-blue', '#0080ff'),
-		purple: get_css_var('--accent-purple', '#845ef7')
-	};
-}
-
 function get_responsive_chart_config() {
 	const is_small_screen = window.innerWidth <= 768;
 	const is_tablet = window.innerWidth <= 1024 && window.innerWidth > 768;
@@ -432,10 +399,6 @@ function update_polar_attenuation() {
 function draw_polar_chart(selected_tests, attenuation_filter = null) {
 	const polar_chart_div = document.getElementById('polarChart');
 
-	const test_types = new Set(selected_tests.map(t => t.test_type || 'rvr'));
-	const is_pure_rotation = test_types.has('rotation') && test_types.size === 1;
-	const has_rvr_rotation = test_types.has('rvr_rotation');
-
 	const traces = [];
 	const palette = chart_palette();
 	const colors = ['#0080ff', '#ff3b30', '#00c896', '#ff9500', '#5856d6', '#ff2d55', '#ffcc00', '#34c759'];
@@ -812,7 +775,6 @@ function drawChart(selected_tests) {
 	const test_types = new Set(selected_tests.map(t => t.test_type || 'rvr'));
 	const is_pure_rotation = test_types.has('rotation') && test_types.size === 1;
 	const has_rvr_rotation = test_types.has('rvr_rotation');
-	const is_mixed = test_types.size > 1;
 
 	let selected_angles = [];
 	if (has_rvr_rotation) {
@@ -952,17 +914,6 @@ function drawChart(selected_tests) {
 		}
 	});
 
-	const angle_dash_patterns = [
-		[],
-		[10, 5],
-		[5, 3],
-		[15, 5, 5, 5],
-		[20, 5],
-		[10, 5, 2, 5],
-		[2, 2],
-		[15, 10]
-	];
-
 	const angle_index_map = new Map();
 
 	const datasets = tests_to_render.map((test, index) => {
@@ -997,7 +948,7 @@ function drawChart(selected_tests) {
 			}
 
 			const angle_idx = angle_map.get(test.display_angle);
-			borderDash = angle_dash_patterns[angle_idx % angle_dash_patterns.length];
+			borderDash = ANGLE_DASH_PATTERNS[angle_idx % ANGLE_DASH_PATTERNS.length];
 
 			const color_variation = angle_idx * 15;
 			const r = parseInt(baseColor.substring(1, 3), 16);
@@ -1010,7 +961,7 @@ function drawChart(selected_tests) {
 
 			baseColor = `#${new_r.toString(16).padStart(2, '0')}${new_g.toString(16).padStart(2, '0')}${new_b.toString(16).padStart(2, '0')}`;
 		} else if (test.direction.includes('RX')) {
-			borderDash = [5, 5];
+			borderDash = SERIES_DASH.rx;
 		}
 
 		return {
