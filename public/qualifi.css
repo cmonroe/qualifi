@@ -123,11 +123,12 @@
 	--glass-bg-2-hover:  rgba(255, 255, 255, 0.06);
 	--glass-border:      rgba(255, 255, 255, 0.10);
 
-	/* Band coding — original qualifi (2.4 red, 5 blue, 6 purple) */
-	--band-2g: #ff6b6b;
-	--band-5g: #4dabf7;
-	--band-5g-high: #4dabf7;
-	--band-6g: #845ef7;
+	/* Band coding — synced with the SmartOS iris freq-pill badges
+	   (dark theme: 2.4 amber, 5 cyan, 6 purple). */
+	--band-2g: #f5a623;
+	--band-5g: #00c8e6;
+	--band-5g-high: #00c8e6;
+	--band-6g: #a78bfa;
 
 	/* TX/RX — original qualifi (TX blue, RX red) */
 	--tx-color: #0080ff;
@@ -139,7 +140,7 @@
 	   >= 3:1 contrast. Re-run the validator before changing any slot:
 	     node <dataviz-skill>/scripts/validate_palette.js \
 	       "<slot1,...,slot8>" --mode dark --surface "#141414" */
-	--chart-cat-1: #3987e5;   /* blue    */
+	--chart-cat-1: #00a0c8;   /* teal (original qualifi Adtran accent) */
 	--chart-cat-2: #d95926;   /* orange  */
 	--chart-cat-3: #199e70;   /* aqua    */
 	--chart-cat-4: #c98500;   /* yellow  */

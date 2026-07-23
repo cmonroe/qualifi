@@ -1398,10 +1398,6 @@ function rf_reach_deviation_chart_render(div, facet, items, order, opts) {
 				color: rf_reach_palette().accent
 			} : { width: 0 }
 		},
-		text: devs.map(d => d === null ? '' : `${d >= 0 ? '+' : ''}${d.toFixed(dec)}`),
-		textposition: 'outside',
-		textfont: { color: rf_reach_palette().text_primary, size: 11, family: rf_reach_mono_font() },
-		cliponaxis: false,
 		hovertemplate: `<b>%{y}</b>`
 			+ `<br>deviation %{x:+.${dec}f} ${opts.unit}`
 			+ `<br>absolute %{customdata[0]:.${dec}f} ${opts.unit}`
@@ -1438,9 +1434,24 @@ function rf_reach_deviation_chart_render(div, facet, items, order, opts) {
 			};
 		}
 	}
+	// Values live in a fixed column in the right margin instead of riding the
+	// bar ends: outside-positioned bar text collides with the near-zero
+	// neutral bars and with the EIRP whiskers.
+	const value_annotations = order.map((label, i) => {
+		const d = devs[i];
+		if (d === null) return null;
+		return {
+			xref: 'paper', x: 1.006, xanchor: 'left',
+			yref: 'y', y: label, yanchor: 'middle',
+			text: `${d >= 0 ? '+' : ''}${d.toFixed(dec)}`,
+			showarrow: false,
+			font: { color: rf_reach_palette().text_secondary, size: 11, family: rf_reach_mono_font() }
+		};
+	}).filter(Boolean);
 	Plotly.newPlot(div, [trace], {
 		...rf_reach_layout_base(),
 		hovermode: 'closest',
+		annotations: value_annotations,
 		title: {
 			text: `${rf_reach_facet_label(facet.unii_band, facet.bw_mhz)} · ${opts.metric_name}`
 				+ ` (${baseline_word} ${cohort_val.toFixed(cohort_dec)} ${opts.unit}, n=${items.length}${small})`,
@@ -1467,7 +1478,7 @@ function rf_reach_deviation_chart_render(div, facet, items, order, opts) {
 				ticktext: order.map(l => focus.has(l) ? `<b>${l}</b>` : l)
 			} : {})
 		},
-		margin: { l: 200, r: 40, t: 56, b: 60 }
+		margin: { l: 200, r: 64, t: 56, b: 60 }
 	}, { responsive: true, displayModeBar: false });
 	rf_reach_hover_attach(div);
 }
@@ -2062,11 +2073,14 @@ function chart_reach_leaderboard_render(container, metrics) {
 		const lb_focus = rf_reach_focus_labels();
 		const labeled = items.filter((m, idx) =>
 			(idx === 0 || lb_focus.has(m.label)) && (m.reach10 || m.reach_bars2));
+		// Text anchors at the data point, so nudge it right by ~2% of the
+		// axis span to clear the 11px marker.
+		const label_pad = (Math.max(...attens) - Math.min(...attens) + 6) * 0.02;
 		if (labeled.length > 0) {
 			traces.push({
 				type: 'scatter',
 				mode: 'text',
-				x: labeled.map(m => (m.reach10 || m.reach_bars2).atten),
+				x: labeled.map(m => (m.reach10 || m.reach_bars2).atten + label_pad),
 				y: labeled.map(m => m.label),
 				text: labeled.map(m => `${rf_reach_crossing_text(m.reach10 || m.reach_bars2)} dB`),
 				textposition: 'middle right',

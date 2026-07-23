@@ -458,8 +458,13 @@ function extract_rvr_data(workbook) {
 				if (isNaN(throughput)) continue;
 
 				if (channel === 0 || throughput === 0) {
-					console.log(`Skipping invalid data point: channel=${channel}, throughput=${throughput}`);
-					skipped_count++;
+					// Zero throughput marks the expected end-of-sweep link
+					// death and is trimmed silently; only a zero channel on a
+					// live link is an anomaly worth surfacing to the user.
+					if (channel === 0 && throughput !== 0) {
+						console.log(`Skipping anomalous data point: channel=0, throughput=${throughput}`);
+						skipped_count++;
+					}
 					continue;
 				}
 

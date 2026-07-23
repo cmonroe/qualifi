@@ -33,7 +33,7 @@ function chart_palette() {
 
 function categorical_palette() {
 	return [
-		get_css_var('--chart-cat-1', '#3987e5'),
+		get_css_var('--chart-cat-1', '#00a0c8'),
 		get_css_var('--chart-cat-2', '#d95926'),
 		get_css_var('--chart-cat-3', '#199e70'),
 		get_css_var('--chart-cat-4', '#c98500'),
@@ -46,19 +46,19 @@ function categorical_palette() {
 
 function band_color(band) {
 	if (band === '2G' || band === '2.4') {
-		return get_css_var('--band-2g', '#ff6b6b');
+		return get_css_var('--band-2g', '#f5a623');
 	}
 
 	if (band === '5G' || band === '5L') {
-		return get_css_var('--band-5g', '#4dabf7');
+		return get_css_var('--band-5g', '#00c8e6');
 	}
 
 	if (band === '5H') {
-		return get_css_var('--band-5g-high', '#4dabf7');
+		return get_css_var('--band-5g-high', '#00c8e6');
 	}
 
 	if (band === '6G' || band === '6') {
-		return get_css_var('--band-6g', '#845ef7');
+		return get_css_var('--band-6g', '#a78bfa');
 	}
 
 	return get_css_var('--text-tertiary', '#707070');
@@ -120,7 +120,7 @@ const RAMP_ORANGE = [
 const BARS_COLORS = ['#2c2c2a', '#d03b3b', '#fab219', '#0ca30c'];
 
 const SLOT_SHADES = [
-	['#3987e5', '#6ba5ec', '#92bdf1', '#2c69b3'],
+	['#00a0c8', '#40b8d6', '#73cbe1', '#007d9c'],
 	['#d95926', '#e3835c', '#eaa488', '#a9451e'],
 	['#199e70', '#53b694', '#81cab0', '#147b57'],
 	['#c98500', '#d7a440', '#e1bc73', '#9d6800'],

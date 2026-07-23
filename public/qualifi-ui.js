@@ -602,7 +602,7 @@ function update_test_options() {
 
 	if (skipped_count > 0) {
 		filter_notice.style.display = 'block';
-		filter_notice_count.textContent = `${skipped_count} invalid data points (channel=0 or throughput=0) filtered across ${loaded_files.size} files`;
+		filter_notice_count.textContent = `${skipped_count} anomalous data points (channel 0 on a live link) filtered across ${loaded_files.size} files`;
 	} else {
 		filter_notice.style.display = 'none';
 	}

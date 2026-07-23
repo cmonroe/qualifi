@@ -266,6 +266,32 @@ function point_is_degraded(ctx) {
 
 let legend_pin_key = null;
 
+// Chart.js's canvas legend ignores lineDash for the built-in 'line' point
+// style, so legend rows use tiny pre-rendered canvases instead: a solid line
+// for TX and the series' dash pattern for RX / rotation angles, matching how
+// the trace is actually drawn.
+const legend_swatch_cache = new Map();
+
+function legend_line_swatch(color, dash) {
+	const key = `${color}|${(dash || []).join(',')}`;
+	const cached = legend_swatch_cache.get(key);
+	if (cached) return cached;
+	const canvas = document.createElement('canvas');
+	canvas.width = 26;
+	canvas.height = 12;
+	const swatch_ctx = canvas.getContext('2d');
+	swatch_ctx.strokeStyle = color;
+	swatch_ctx.lineWidth = 2.5;
+	swatch_ctx.lineCap = 'round';
+	if (dash && dash.length > 0) swatch_ctx.setLineDash(dash);
+	swatch_ctx.beginPath();
+	swatch_ctx.moveTo(1, 6);
+	swatch_ctx.lineTo(25, 6);
+	swatch_ctx.stroke();
+	legend_swatch_cache.set(key, canvas);
+	return canvas;
+}
+
 function legend_highlight_apply(chart, legendItem) {
 	chart.data.datasets.forEach((ds, i) => {
 		const keep = legendItem.datasetIndex === -1
@@ -1435,6 +1461,7 @@ function drawChart(selected_tests) {
 									...item,
 									text,
 									version_part,
+									pointStyle: legend_line_swatch(dataset.borderColor, dataset.borderDash),
 									angle: has_angle ? dataset.display_angle : null
 								});
 							});
