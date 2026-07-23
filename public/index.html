@@ -274,6 +274,17 @@
 						<span class="rf-band-filter-label">Bands</span>
 						<div class="rf-band-filter-options" id="rfReachBandFilters"></div>
 					</div>
+					<div class="rf-band-filter" aria-label="Focus product">
+						<label class="rf-band-filter-label" for="rfReachFocusSelect">Focus</label>
+						<select id="rfReachFocusSelect" class="rf-focus-select" onchange="rf_reach_focus_change()" title="Emphasize one product across every chart: it keeps full color and draws on top while competitors gray out">
+							<option value="">None</option>
+						</select>
+					</div>
+					<div class="rf-band-filter" role="group" aria-label="Deviation baseline">
+						<span class="rf-band-filter-label">Baseline</span>
+						<button type="button" class="rf-baseline-btn active" data-baseline="cohort" onclick="rf_reach_baseline_change('cohort')" title="Deviation charts measure against the cohort median">cohort</button>
+						<button type="button" class="rf-baseline-btn" data-baseline="focus" onclick="rf_reach_baseline_change('focus')" title="Deviation charts measure against the focus product; facets without focus data fall back to the cohort median">vs focus</button>
+					</div>
 				</div>
 				<div class="rf-reach-summary">
 					<div id="rfReachTiles" class="rf-tile-row"></div>

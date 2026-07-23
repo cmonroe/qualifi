@@ -48,6 +48,9 @@ const RF_REACH_BAND_FILTERS = [
 ];
 const RF_REACH_BANDS_STORE_KEY = 'qualifi_rf_bands';
 const RF_REACH_VENDOR_SLOTS_STORE_KEY = 'qualifi_rf_vendor_slots';
+const RF_REACH_FOCUS_STORE_KEY = 'qualifi_rf_focus_product';
+const RF_REACH_BASELINE_STORE_KEY = 'qualifi_rf_baseline';
+const RF_REACH_DEEMPH = 'rgba(112, 112, 112, 0.55)';
 
 // Atten window over which the EIRP-proxy median is taken, per coarse band.
 // Lower bound (5 dB) is roughly where AGC stops saturating across the cohort.
@@ -214,7 +217,9 @@ function rf_reach_hover_highlight_apply(div, p, state) {
 	const palette = rf_reach_palette();
 	try {
 		if (t === 'heatmap') {
-			Plotly.relayout(div, { shapes: [{
+			// Persistent shapes (e.g. the focus-row outline) live on
+			// div.__baseShapes; the hover rect is appended on top of them.
+			Plotly.relayout(div, { shapes: [...(div.__baseShapes || []), {
 				type: 'rect', xref: 'x', yref: 'y',
 				x0: p.x - state.xStep / 2, x1: p.x + state.xStep / 2,
 				y0: p.pointNumber[0] - 0.5, y1: p.pointNumber[0] + 0.5,
@@ -252,7 +257,7 @@ function rf_reach_hover_highlight_clear(div, p) {
 	if (!document.body.contains(div) || typeof Plotly === 'undefined') return;
 	try {
 		if (t === 'heatmap') {
-			Plotly.relayout(div, { shapes: [] });
+			Plotly.relayout(div, { shapes: div.__baseShapes || [] });
 		} else if (t === 'bar') {
 			Plotly.restyle(div, { 'marker.line.width': [0] }, [p.curveNumber]);
 		} else if (t === 'scatterpolar') {
@@ -694,6 +699,78 @@ function rf_reach_product_index_build(rows, metrics) {
 	return { products, order };
 }
 
+let rf_reach_focus_key = null;
+let rf_reach_baseline_mode = 'cohort';
+
+function rf_reach_prefs_load() {
+	try {
+		rf_reach_focus_key = localStorage.getItem(RF_REACH_FOCUS_STORE_KEY) || null;
+		const baseline = localStorage.getItem(RF_REACH_BASELINE_STORE_KEY);
+		rf_reach_baseline_mode = baseline === 'focus' ? 'focus' : 'cohort';
+	} catch (_) { /* private mode */ }
+}
+rf_reach_prefs_load();
+
+// All software versions of the focus (vendor, model) count as "yours".
+function rf_reach_focus_labels() {
+	const index = rf_reach_cached_context && rf_reach_cached_context.product_index;
+	const labels = new Set();
+	if (!index || !rf_reach_focus_key) return labels;
+	for (const p of index.products.values()) {
+		if (`${p.vendor}|${p.model}` === rf_reach_focus_key) labels.add(p.label);
+	}
+	return labels;
+}
+
+function rf_reach_focus_active() {
+	return rf_reach_focus_labels().size > 0;
+}
+
+function rf_reach_focus_change() {
+	const select = document.getElementById('rfReachFocusSelect');
+	if (!select) return;
+	rf_reach_focus_key = select.value || null;
+	try {
+		if (rf_reach_focus_key) localStorage.setItem(RF_REACH_FOCUS_STORE_KEY, rf_reach_focus_key);
+		else localStorage.removeItem(RF_REACH_FOCUS_STORE_KEY);
+	} catch (_) { /* private mode */ }
+	rf_reach_render_cached();
+}
+
+function rf_reach_baseline_change(mode) {
+	rf_reach_baseline_mode = mode === 'focus' ? 'focus' : 'cohort';
+	try {
+		localStorage.setItem(RF_REACH_BASELINE_STORE_KEY, rf_reach_baseline_mode);
+	} catch (_) { /* private mode */ }
+	document.querySelectorAll('.rf-baseline-btn').forEach(b =>
+		b.classList.toggle('active', b.dataset.baseline === rf_reach_baseline_mode));
+	rf_reach_render_cached();
+}
+
+function rf_reach_focus_select_render() {
+	const select = document.getElementById('rfReachFocusSelect');
+	const index = rf_reach_cached_context && rf_reach_cached_context.product_index;
+	if (!select || !index) return;
+	const products = new Map();
+	for (const p of index.products.values()) {
+		products.set(`${p.vendor}|${p.model}`, `${p.vendor}/${p.model}`);
+	}
+	select.textContent = '';
+	const none = document.createElement('option');
+	none.value = '';
+	none.textContent = 'None';
+	select.appendChild(none);
+	for (const [key, name] of Array.from(products.entries()).sort((a, b) => a[1].localeCompare(b[1]))) {
+		const opt = document.createElement('option');
+		opt.value = key;
+		opt.textContent = name;
+		select.appendChild(opt);
+	}
+	select.value = rf_reach_focus_key && products.has(rf_reach_focus_key) ? rf_reach_focus_key : '';
+	document.querySelectorAll('.rf-baseline-btn').forEach(b =>
+		b.classList.toggle('active', b.dataset.baseline === rf_reach_baseline_mode));
+}
+
 function rf_reach_product_style(label) {
 	const index = rf_reach_cached_context && rf_reach_cached_context.product_index;
 	const p = index && index.products.get(label);
@@ -801,12 +878,15 @@ function rf_reach_median(arr) {
 	return sorted.length % 2 ? sorted[mid] : 0.5 * (sorted[mid - 1] + sorted[mid]);
 }
 
-// Generic deviation-from-cohort-median finalisation. Each summary item must
-// carry { unii_band, bw_mhz, value }; the function annotates each item with
-// cohort_value (median of values within the same band/BW facet) and deviation
-// (item.value - cohort_value). The per-product aggregator that produced
-// item.value (median, mean, ...) is decided by the caller; the cohort
-// baseline always uses median for robustness against outlier products.
+// Generic deviation-baseline finalisation. Each summary item must carry
+// { model_label, unii_band, bw_mhz, value }; the function annotates each item
+// with cohort_value (the facet baseline), deviation (value - baseline), and
+// baseline_kind ('cohort' | 'focus'). Baseline is the facet's cohort median,
+// or, when the baseline toggle is on "vs focus" and the focus product has
+// data in the facet, the focus product's own value (newest version wins when
+// several are loaded); facets without focus data fall back to the cohort
+// median. Reads the module focus/baseline state directly so the four
+// deviation computes and the CSV builder all agree without opts threading.
 function rf_reach_deviation_summary_finalize(summary) {
 	const cohort_keyed = new Map();
 	for (const s of summary) {
@@ -816,8 +896,26 @@ function rf_reach_deviation_summary_finalize(summary) {
 	}
 	const cohort_median = new Map();
 	for (const [fk, arr] of cohort_keyed.entries()) cohort_median.set(fk, rf_reach_median(arr));
+	const focus_baseline = new Map();
+	if (rf_reach_baseline_mode === 'focus') {
+		const focus = rf_reach_focus_labels();
+		for (const s of summary) {
+			if (!focus.has(s.model_label)) continue;
+			const fk = `${s.unii_band}|${s.bw_mhz}`;
+			const cur = focus_baseline.get(fk);
+			const solid = rf_reach_product_style(s.model_label).dash === 'solid';
+			if (!cur || solid) focus_baseline.set(fk, s.value);
+		}
+	}
 	for (const s of summary) {
-		s.cohort_value = cohort_median.get(`${s.unii_band}|${s.bw_mhz}`);
+		const fk = `${s.unii_band}|${s.bw_mhz}`;
+		if (focus_baseline.has(fk)) {
+			s.cohort_value = focus_baseline.get(fk);
+			s.baseline_kind = 'focus';
+		} else {
+			s.cohort_value = cohort_median.get(fk);
+			s.baseline_kind = 'cohort';
+		}
 		s.deviation = s.value - s.cohort_value;
 	}
 	return summary;
@@ -981,6 +1079,7 @@ function rf_reach_faceted_heatmap_render(container, rows, config) {
 	const layout_overrides = config.layout || {};
 	const value_fn = config.value_fn || (r => r.rssi_dbm);
 	const y_order_fn = config.y_order_fn || rf_reach_y_order_global;
+	const focus = rf_reach_focus_labels();
 	facets.forEach((facet, i) => {
 		const order = y_order_fn(facet.rows, r => r.model_label);
 		const pivot = rf_reach_pivot_mean(facet.rows, value_fn);
@@ -988,6 +1087,16 @@ function rf_reach_faceted_heatmap_render(container, rows, config) {
 		const z_raw = rf_reach_z_matrix_build(y_keys_ordered, global_x_keys, pivot.cells);
 		const z = config.z_transform ? z_raw.map(row => row.map(config.z_transform)) : z_raw;
 		const trace_facet_overrides = config.trace_facet_fn ? config.trace_facet_fn(facet, pivot) : {};
+		const focus_shapes = [];
+		y_keys_ordered.forEach((label, idx) => {
+			if (!focus.has(label)) return;
+			focus_shapes.push({
+				type: 'rect', xref: 'paper', yref: 'y',
+				x0: 0, x1: 1, y0: idx - 0.5, y1: idx + 0.5,
+				line: { color: rf_reach_palette().accent, width: 1.5 },
+				fillcolor: 'rgba(0,0,0,0)', layer: 'above'
+			});
+		});
 		Plotly.newPlot(divs[i], [{
 			type: 'heatmap',
 			z,
@@ -998,6 +1107,7 @@ function rf_reach_faceted_heatmap_render(container, rows, config) {
 		}], {
 			...rf_reach_layout_base(),
 			...layout_overrides,
+			shapes: focus_shapes,
 			title: {
 				text: rf_reach_facet_label(facet.unii_band, facet.bw_mhz),
 				font: rf_reach_title_font(),
@@ -1011,8 +1121,17 @@ function rf_reach_faceted_heatmap_render(container, rows, config) {
 				dtick: 5,
 				range: x_range
 			},
-			yaxis: { ...rf_reach_axis_base(), autorange: 'reversed' }
+			yaxis: {
+				...rf_reach_axis_base(),
+				autorange: 'reversed',
+				...(focus.size > 0 ? {
+					tickmode: 'array',
+					tickvals: y_keys_ordered,
+					ticktext: y_keys_ordered.map(l => focus.has(l) ? `<b>${l}</b>` : l)
+				} : {})
+			}
 		}, { responsive: true, displayModeBar: false });
+		divs[i].__baseShapes = focus_shapes;
 		rf_reach_hover_attach(divs[i]);
 	});
 }
@@ -1142,12 +1261,17 @@ function chart_tput_vs_atten_render(container, rows) {
 				tput: c.tput_sum / c.n
 			});
 		}
+		const focus = rf_reach_focus_labels();
+		const focus_on = focus.size > 0;
 		const traces = [];
 		for (const label of rf_reach_order_filter(Array.from(per_model.keys()))) {
 			const points = per_model.get(label);
 			points.sort((a, b) => a.atten - b.atten);
 			if (points.length === 0) continue;
 			const style = rf_reach_product_style(label);
+			const is_focus = focus.has(label);
+			const dimmed = focus_on && !is_focus;
+			const color = dimmed ? RF_REACH_DEEMPH : style.color;
 			traces.push({
 				type: 'scatter',
 				mode: 'lines+markers',
@@ -1155,11 +1279,15 @@ function chart_tput_vs_atten_render(container, rows) {
 				y: points.map(p => p.tput),
 				customdata: points.map(p => [p.rssi]),
 				name: label,
-				line: { color: style.color, width: 1.5, dash: style.dash },
-				marker: { color: style.color, size: 5, symbol: style.marker },
+				meta: { focus: is_focus },
+				line: { color, width: is_focus ? 2.5 : (dimmed ? 1 : 1.5), dash: style.dash },
+				marker: { color, size: 5, symbol: style.marker },
 				hovertemplate: `<b>${label}</b><br>atten %{x:.0f} dB<br>RSSI %{customdata[0]:.1f} dBm<br>%{y:.0f} Mbps<extra></extra>`,
 				showlegend: true
 			});
+		}
+		if (focus_on) {
+			traces.sort((a, b) => (a.meta.focus ? 1 : 0) - (b.meta.focus ? 1 : 0));
 		}
 		Plotly.newPlot(divs[i], traces, {
 			...rf_reach_layout_base(),
@@ -1234,21 +1362,32 @@ function rf_reach_deviation_chart_render(div, facet, items, order, opts) {
 	const devs = order.map(l => by_label.has(l) ? by_label.get(l).deviation : null);
 	const abs_vals = order.map(l => by_label.has(l) ? by_label.get(l).value : null);
 	const cohort_val = items[0].cohort_value;
+	const baseline_word = items[0].baseline_kind === 'focus' ? 'focus baseline' : 'cohort median';
 	const dec = opts.decimals;
 	const cohort_dec = opts.cohort_decimals !== undefined ? opts.cohort_decimals : dec;
 	const max_abs = Math.max(1.0, ...devs.filter(d => d !== null).map(Math.abs));
 	const x_pad = max_abs * 0.35;
 	const small = items.length < 5 ? ', small cohort' : '';
-	Plotly.newPlot(div, [{
+	const metrics = rf_reach_cached_context && rf_reach_cached_context.metrics;
+	const slope_note = (l) => {
+		const m = metrics && metrics.get(`${l}|${facet.unii_band}|${facet.bw_mhz}`);
+		return m && m.slope_ok === false ? '<br>[!] RSSI slope off -1 dB/dB, proxy less reliable' : '';
+	};
+	const focus = rf_reach_focus_labels();
+	const focus_on = focus.size > 0;
+	const trace = {
 		type: 'bar',
 		orientation: 'h',
 		y: order,
 		x: devs,
-		customdata: abs_vals,
+		customdata: order.map((l, i) => [abs_vals[i], slope_note(l)]),
 		marker: {
 			color: rf_reach_deviation_colors(devs, opts.eps),
 			cornerradius: 4,
-			line: { width: 0 }
+			line: focus_on ? {
+				width: order.map(l => focus.has(l) ? 2 : 0),
+				color: rf_reach_palette().accent
+			} : { width: 0 }
 		},
 		text: devs.map(d => d === null ? '' : `${d >= 0 ? '+' : ''}${d.toFixed(dec)}`),
 		textposition: 'outside',
@@ -1256,16 +1395,46 @@ function rf_reach_deviation_chart_render(div, facet, items, order, opts) {
 		cliponaxis: false,
 		hovertemplate: `<b>%{y}</b>`
 			+ `<br>deviation %{x:+.${dec}f} ${opts.unit}`
-			+ `<br>absolute %{customdata:.${dec}f} ${opts.unit}`
-			+ `<br>cohort median ${cohort_val.toFixed(cohort_dec)} ${opts.unit}<extra></extra>`,
+			+ `<br>absolute %{customdata[0]:.${dec}f} ${opts.unit}`
+			+ `<br>${baseline_word} ${cohort_val.toFixed(cohort_dec)} ${opts.unit}`
+			+ `%{customdata[1]}<extra></extra>`,
 		showlegend: false,
 		name: opts.metric_name
-	}], {
+	};
+	if (opts.whiskers && metrics) {
+		const plus = [];
+		const minus = [];
+		let any = false;
+		for (const l of order) {
+			const m = metrics.get(`${l}|${facet.unii_band}|${facet.bw_mhz}`);
+			const s = by_label.get(l);
+			if (m && s && m.eirp_p25 !== null && m.eirp_p75 !== null) {
+				plus.push(Math.max(0, m.eirp_p75 - s.value));
+				minus.push(Math.max(0, s.value - m.eirp_p25));
+				any = true;
+			} else {
+				plus.push(0);
+				minus.push(0);
+			}
+		}
+		if (any) {
+			trace.error_x = {
+				type: 'data',
+				symmetric: false,
+				array: plus,
+				arrayminus: minus,
+				color: 'rgba(255, 255, 255, 0.4)',
+				thickness: 1,
+				width: 3
+			};
+		}
+	}
+	Plotly.newPlot(div, [trace], {
 		...rf_reach_layout_base(),
 		hovermode: 'closest',
 		title: {
 			text: `${rf_reach_facet_label(facet.unii_band, facet.bw_mhz)} · ${opts.metric_name}`
-				+ ` (cohort ${cohort_val.toFixed(cohort_dec)} ${opts.unit}, n=${items.length}${small})`,
+				+ ` (${baseline_word} ${cohort_val.toFixed(cohort_dec)} ${opts.unit}, n=${items.length}${small})`,
 			font: rf_reach_title_font(),
 			x: 0.02,
 			xanchor: 'left',
@@ -1282,7 +1451,12 @@ function rf_reach_deviation_chart_render(div, facet, items, order, opts) {
 		yaxis: {
 			...rf_reach_axis_base(),
 			autorange: 'reversed',
-			gridcolor: 'transparent'
+			gridcolor: 'transparent',
+			...(focus_on ? {
+				tickmode: 'array',
+				tickvals: order,
+				ticktext: order.map(l => focus.has(l) ? `<b>${l}</b>` : l)
+			} : {})
 		},
 		margin: { l: 200, r: 40, t: 56, b: 60 }
 	}, { responsive: true, displayModeBar: false });
@@ -1308,6 +1482,7 @@ function chart_deviation_pair_render(container, eirp_summary, tput_summary, opts
 			decimals: 2,
 			cohort_decimals: 1,
 			eps: 0.25,
+			whiskers: true,
 			empty_message: opts.eirp_empty
 		});
 		rf_reach_deviation_chart_render(divs[2 * i + 1], facet, facet.tput, order, {
@@ -1442,8 +1617,13 @@ function chart_iphone_bars_rotation_render(container, rows) {
 		d.style.cssText = `height: ${Math.max(320, 80 + 22 * row_items.length)}px; width: 100%;`;
 		grid.appendChild(d);
 		rf_reach_last_facet_divs.push(d);
+		const rotation_focus = rf_reach_focus_labels();
 		const y_keys = row_items.map(item => item.y_key);
-		const y_labels = row_items.map(item => item.y_text);
+		const y_labels = row_items.map(item =>
+			item.rotation === null && rotation_focus.has(item.label)
+				? `<b>${item.y_text}</b>`
+				: item.y_text
+		);
 		const z = row_items.map(item => item.bars);
 		const customdata = row_items.map(item =>
 			item.customdata.map(cell => [item.label, item.rotation, cell[0]])
@@ -1555,8 +1735,10 @@ function rf_reach_polar_legend_create(products_with_source, trace_index_map) {
 	const by_label = new Map(products_with_source.map(p => [p.label, p]));
 	const sorted = rf_reach_order_filter(Array.from(by_label.keys()))
 		.map(label => by_label.get(label));
+	const legend_focus = rf_reach_focus_labels();
 	for (const p of sorted) {
-		const color = rf_reach_product_style(p.label).color;
+		const dimmed = legend_focus.size > 0 && !legend_focus.has(p.label);
+		const color = dimmed ? RF_REACH_DEEMPH : rf_reach_product_style(p.label).color;
 		const chip = document.createElement('span');
 		chip.className = 'rf-bars-legend-chip rf-polar-legend-chip';
 		chip.tabIndex = 0;
@@ -1594,6 +1776,12 @@ function rf_reach_polar_legend_create(products_with_source, trace_index_map) {
 	return wrap;
 }
 
+// Absolute radial values mix pattern shape with per-product reference power.
+// Normalizing each trace to its own peak (0 dB at peak, negative elsewhere)
+// isolates the shape, which is what the polar chart is for; absolute RSSI
+// stays available in the hover.
+let rf_reach_polar_normalize = false;
+
 function chart_polar_render(container, polar_rows, azimuth_rows) {
 	const facets = rf_reach_polar_traces_collect(polar_rows, azimuth_rows);
 	const non_empty = facets.filter(f => f.products.size > 0);
@@ -1618,31 +1806,49 @@ function chart_polar_render(container, polar_rows, azimuth_rows) {
 	const divs = rf_reach_facet_grid_make(container, non_empty.length, 800, 1);
 	rf_reach_last_facet_divs = rf_reach_last_facet_divs.concat(divs);
 	const trace_index_map = [];
+	const focus = rf_reach_focus_labels();
+	const focus_on = focus.size > 0;
 	non_empty.forEach((facet, i) => {
 		const traces = [];
 		const label_to_idx = {};
 		const all_rssi = [];
-		for (const p of facet.products.values()) {
+		const products = Array.from(facet.products.values());
+		if (focus_on) {
+			products.sort((a, b) =>
+				(focus.has(a.model_label) ? 1 : 0) - (focus.has(b.model_label) ? 1 : 0));
+		}
+		for (const p of products) {
 			const pairs = p.rotations.map((θ, idx) => ({ θ, r: p.rssi[idx] }))
 				.filter(d => Number.isFinite(d.θ) && Number.isFinite(d.r))
 				.sort((a, b) => a.θ - b.θ);
 			if (pairs.length < 2) continue;
+			const peak = Math.max(...pairs.map(d => d.r));
+			for (const d of pairs) {
+				d.abs = d.r;
+				if (rf_reach_polar_normalize) d.r = d.r - peak;
+			}
 			for (const d of pairs) all_rssi.push(d.r);
-			pairs.push({ θ: pairs[0].θ + 360, r: pairs[0].r });
+			pairs.push({ θ: pairs[0].θ + 360, r: pairs[0].r, abs: pairs[0].abs });
 			const style = rf_reach_product_style(p.model_label);
 			// Fallback dot-dash outranks the version dash: knowing a trace came
 			// from the wrong test matters more than which sw version it is.
 			const dash = p.source === 'azimuth_fallback' ? 'dot' : style.dash;
+			const is_focus = focus.has(p.model_label);
+			const dimmed = focus_on && !is_focus;
+			const color = dimmed ? RF_REACH_DEEMPH : style.color;
 			label_to_idx[p.model_label] = traces.length;
 			traces.push({
 				type: 'scatterpolar',
 				mode: 'lines+markers',
 				r: pairs.map(d => d.r),
 				theta: pairs.map(d => d.θ),
+				customdata: pairs.map(d => [d.abs]),
 				name: p.model_label + (p.source === 'azimuth_fallback' ? ` (atten ${p.fallback_atten_db} dB)` : ''),
-				line: { color: style.color, width: 1.5, dash },
-				marker: { color: style.color, size: 4, symbol: style.marker },
-				hovertemplate: `<b>${p.model_label}</b><br>θ %{theta:.0f}°<br>RSSI %{r:.1f} dBm<extra></extra>`,
+				line: { color, width: is_focus ? 2.5 : (dimmed ? 1 : 1.5), dash },
+				marker: { color, size: 4, symbol: style.marker },
+				hovertemplate: rf_reach_polar_normalize
+					? `<b>${p.model_label}</b><br>θ %{theta:.0f}°<br>%{r:.1f} dB below peak<br>RSSI %{customdata[0]:.1f} dBm<extra></extra>`
+					: `<b>${p.model_label}</b><br>θ %{theta:.0f}°<br>RSSI %{r:.1f} dBm<extra></extra>`,
 				showlegend: false
 			});
 		}
@@ -1698,6 +1904,16 @@ function chart_polar_render(container, polar_rows, azimuth_rows) {
 	const legend = rf_reach_polar_legend_create(
 		Array.from(all_products.values()), trace_index_map
 	);
+	const norm_btn = document.createElement('button');
+	norm_btn.type = 'button';
+	norm_btn.className = `rf-export-btn${rf_reach_polar_normalize ? ' active' : ''}`;
+	norm_btn.textContent = 'normalize to peak';
+	norm_btn.title = 'Rescale each trace to 0 dB at its own peak so pattern shape compares directly; absolute RSSI stays in the hover';
+	norm_btn.addEventListener('click', () => {
+		rf_reach_polar_normalize = !rf_reach_polar_normalize;
+		rf_reach_render_cached();
+	});
+	legend.appendChild(norm_btn);
 	container.insertBefore(legend, container.firstChild);
 }
 
@@ -1834,15 +2050,16 @@ function chart_reach_leaderboard_render(container, metrics) {
 			hovertemplate: '<b>%{y}</b><br>%{customdata[0]}<br>%{customdata[1]}<extra></extra>',
 			showlegend: false
 		});
-		const leader = items[0];
-		const leader_crossing = leader.reach10 || leader.reach_bars2;
-		if (leader_crossing) {
+		const lb_focus = rf_reach_focus_labels();
+		const labeled = items.filter((m, idx) =>
+			(idx === 0 || lb_focus.has(m.label)) && (m.reach10 || m.reach_bars2));
+		if (labeled.length > 0) {
 			traces.push({
 				type: 'scatter',
 				mode: 'text',
-				x: [leader_crossing.atten],
-				y: [leader.label],
-				text: [`${rf_reach_crossing_text(leader_crossing)} dB`],
+				x: labeled.map(m => (m.reach10 || m.reach_bars2).atten),
+				y: labeled.map(m => m.label),
+				text: labeled.map(m => `${rf_reach_crossing_text(m.reach10 || m.reach_bars2)} dB`),
 				textposition: 'middle right',
 				textfont: {
 					color: rf_reach_palette().text_primary,
@@ -1876,7 +2093,12 @@ function chart_reach_leaderboard_render(container, metrics) {
 				autorange: 'reversed',
 				categoryorder: 'array',
 				categoryarray: labels,
-				gridcolor: 'transparent'
+				gridcolor: 'transparent',
+				...(lb_focus.size > 0 ? {
+					tickmode: 'array',
+					tickvals: labels,
+					ticktext: labels.map(l => lb_focus.has(l) ? `<b>${l}</b>` : l)
+				} : {})
 			},
 			margin: { l: 200, r: 80, t: 56, b: 60 }
 		}, { responsive: true, displayModeBar: false });
@@ -1908,6 +2130,7 @@ function rf_reach_tile_groups(metrics) {
 function rf_reach_summary_tiles_render(container, metrics) {
 	if (!container) return;
 	container.textContent = '';
+	const focus = rf_reach_focus_labels();
 	const groups = rf_reach_tile_groups(metrics);
 	for (const g of groups) {
 		const items = [...g.facet.items].sort((a, b) => rf_reach_rank_value(b) - rf_reach_rank_value(a));
@@ -1935,6 +2158,21 @@ function rf_reach_summary_tiles_render(container, metrics) {
 			detail.textContent = leader.reach10 ? '@10 Mbps · only product' : '2-bars RSSI · only product';
 		}
 		tile.append(band, value, leader_el, detail);
+		if (focus.size > 0) {
+			const focus_item = items.find(m => focus.has(m.label));
+			const delta_el = document.createElement('div');
+			if (focus.has(leader.label)) {
+				delta_el.className = 'rf-tile-delta rf-tile-delta-up';
+				delta_el.textContent = '▲ yours leads this band';
+				tile.appendChild(delta_el);
+			} else if (focus_item) {
+				const delta = rf_reach_rank_value(focus_item) - rf_reach_rank_value(leader);
+				const crossing = focus_item.reach10 || focus_item.reach_bars2;
+				delta_el.className = 'rf-tile-delta rf-tile-delta-down';
+				delta_el.textContent = `▼ yours: ${rf_reach_crossing_text(crossing)} dB (${delta.toFixed(1)})`;
+				tile.appendChild(delta_el);
+			}
+		}
 		container.appendChild(tile);
 	}
 }
@@ -2008,6 +2246,7 @@ function rf_reach_leaderboard_table_render(container, metrics) {
 		return dir * (va - vb);
 	});
 	container.textContent = '';
+	const table_focus = rf_reach_focus_labels();
 	const table = document.createElement('table');
 	table.className = 'rf-reach-table';
 	const thead = document.createElement('thead');
@@ -2028,6 +2267,7 @@ function rf_reach_leaderboard_table_render(container, metrics) {
 	const tbody = document.createElement('tbody');
 	for (const d of data) {
 		const tr = document.createElement('tr');
+		if (table_focus.has(d.product)) tr.classList.add('rf-focus-row');
 		const cells = [
 			d.rank, d.product, d.band, `${Math.round(d.bw_mhz)}`, d.n_steps,
 			d.reach10_t, d.reach100_t, d.bars2_t, d.eirp_t, d.tput_t, d.slope_t
@@ -2221,6 +2461,12 @@ function rf_reach_render_cached() {
 	rf_reach_last_facet_divs = [];
 	const { normalized, paths, local_count, err_count } = rf_reach_cached_context;
 	const notes = rf_reach_status_notes_collect(local_count, err_count);
+	const slope_bad = Array.from((rf_reach_cached_context.metrics || new Map()).values())
+		.filter(m => rf_reach_active_bands.has(m.unii_band) && m.slope_ok === false).length;
+	if (slope_bad > 0) {
+		notes.push(`${slope_bad} sweep(s) RSSI slope off -1 dB/dB, EIRP proxy less reliable`);
+	}
+	rf_reach_focus_select_render();
 	const selected_labels = rf_reach_selected_band_labels();
 	if (selected_labels.length === 0) {
 		rf_reach_status_render(status_div, { reports: paths.length }, ['no bands selected', ...notes]);

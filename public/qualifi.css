@@ -2507,6 +2507,74 @@ footer .version {
 	color: var(--text-primary);
 }
 
+.rf-focus-select {
+	padding: 2px 8px;
+	background-color: var(--bg-secondary);
+	border: 1px solid var(--border-default);
+	border-radius: 6px;
+	color: var(--text-primary);
+	font-family: var(--mono-font);
+	font-size: 0.6875rem;
+	cursor: pointer;
+	max-width: 220px;
+}
+
+.rf-focus-select:focus {
+	outline: none;
+	border-color: var(--accent-cyan);
+}
+
+.rf-baseline-btn {
+	padding: 1px 9px;
+	min-height: 20px;
+	border: 1px solid var(--border-default);
+	background-color: var(--bg-secondary);
+	color: var(--text-tertiary);
+	font-family: var(--mono-font);
+	font-size: 0.6875rem;
+	font-weight: var(--font-weight-bold);
+	cursor: pointer;
+}
+
+.rf-baseline-btn:first-of-type {
+	border-radius: 6px 0 0 6px;
+}
+
+.rf-baseline-btn:last-of-type {
+	border-radius: 0 6px 6px 0;
+}
+
+.rf-baseline-btn.active {
+	background-color: var(--accent-cyan);
+	border-color: var(--accent-cyan);
+	color: var(--bg-primary);
+}
+
+.rf-tile-delta {
+	font-size: 0.75rem;
+	margin-top: 6px;
+	font-variant-numeric: tabular-nums;
+}
+
+.rf-tile-delta-up {
+	color: var(--accent-success);
+}
+
+.rf-tile-delta-down {
+	color: var(--accent-danger);
+}
+
+.rf-reach-table tr.rf-focus-row td {
+	background-color: var(--accent-primary-dim);
+	color: var(--text-primary);
+}
+
+.rf-export-btn.active {
+	background-color: var(--accent-cyan);
+	border-color: var(--accent-cyan);
+	color: var(--bg-primary);
+}
+
 .cross-report-status-row {
 	display: flex;
 	align-items: center;
