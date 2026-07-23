@@ -56,8 +56,7 @@ function get_responsive_chart_config() {
 						size: is_small_screen ? 10 : 12
 					},
 					padding: is_small_screen ? 8 : 16,
-					usePointStyle: true,
-					pointStyle: 'line'
+					usePointStyle: true
 				}
 			}
 		},
@@ -133,6 +132,116 @@ function get_country_code(country_value) {
 	if (!text || text.toLowerCase() === 'unknown') return '';
 	const match = text.match(/^country\s*:\s*(.+)$/i);
 	return (match ? match[1] : text).trim();
+}
+
+function device_key_get(device_info, file_name) {
+	return device_info?.['Model Number'] || device_info?.Name || file_name;
+}
+
+// Sticky device -> palette-slot map. A device keeps its slot for as long as
+// any of its files stay loaded, so changing the selection never repaints
+// surviving series. Slots free up only when the device's files are removed
+// (device_slots_prune, hooked into update_test_options).
+const device_slot_map = new Map();
+
+function device_slot_acquire(device_key) {
+	if (device_slot_map.has(device_key)) return device_slot_map.get(device_key);
+	const used = new Set(device_slot_map.values());
+	let slot = 0;
+	while (used.has(slot)) slot++;
+	device_slot_map.set(device_key, slot);
+	return slot;
+}
+
+function device_slots_prune() {
+	const present = new Set();
+	loaded_files.forEach(entry => {
+		present.add(device_key_get(entry.device_info, entry.file_name));
+	});
+	for (const key of Array.from(device_slot_map.keys())) {
+		if (!present.has(key)) device_slot_map.delete(key);
+	}
+}
+
+function series_identity_key(test) {
+	const device = device_key_get(test.device_info, test.file_name);
+	const sw = test.device_info?.['Software Version'] || '';
+	const country = get_country_code(test.device_info?.Country);
+	return `${device}|${sw}|${country}|${formatTestName(test)}`;
+}
+
+// Color follows the entity under comparison. Two or more devices selected:
+// hue per device (config/direction stay distinguishable via marker shape and
+// dash), older software versions of a device step toward the surface so the
+// newest build owns the full hue. Single device selected: the configs are
+// the compared entities, so each (version, config) takes its own slot hue,
+// like the tool always did for one-device analysis.
+function assign_series_identity(tests_to_render) {
+	const palette = categorical_palette();
+	const overflow_color = get_css_var('--chart-cat-overflow', '#8a8a8a');
+	const surface = get_css_var('--bg-secondary', '#141414');
+	const infos = tests_to_render.map(test => ({
+		key: series_identity_key(test),
+		device_key: device_key_get(test.device_info, test.file_name),
+		sw: test.device_info?.['Software Version'] || '',
+		country: get_country_code(test.device_info?.Country),
+		config: formatTestName(test)
+	}));
+	const device_keys = new Set(infos.map(i => i.device_key));
+	const identity = new Map();
+	const overflow_devices = new Set();
+	if (device_keys.size <= 1) {
+		const config_slots = new Map();
+		for (const i of infos) {
+			const ckey = `${i.sw}|${i.country}|${i.config}`;
+			if (!config_slots.has(ckey)) config_slots.set(ckey, config_slots.size);
+			const slot = config_slots.get(ckey);
+			identity.set(i.key, {
+				color: slot < palette.length ? palette[slot] : overflow_color,
+				device_key: i.device_key
+			});
+			if (slot >= palette.length) overflow_devices.add(i.config);
+		}
+		return { identity, overflow: overflow_devices, device_count: device_keys.size };
+	}
+	const versions_per_device = new Map();
+	for (const i of infos) {
+		if (!versions_per_device.has(i.device_key)) versions_per_device.set(i.device_key, new Set());
+		versions_per_device.get(i.device_key).add(i.sw);
+	}
+	for (const i of infos) {
+		const slot = device_slot_acquire(i.device_key);
+		let color = slot < palette.length ? palette[slot] : overflow_color;
+		if (slot >= palette.length) overflow_devices.add(i.device_key);
+		const versions = Array.from(versions_per_device.get(i.device_key)).sort(compare_versions);
+		const steps_back = versions.length - 1 - versions.indexOf(i.sw);
+		if (steps_back > 0) color = color_blend(color, surface, Math.min(steps_back, 2) * 0.22);
+		identity.set(i.key, { color, device_key: i.device_key });
+	}
+	return { identity, overflow: overflow_devices, device_count: device_keys.size };
+}
+
+function chart_notice_render(messages) {
+	const div = document.getElementById('chartNotice');
+	if (!div) return;
+	if (!messages || messages.length === 0 || div.dataset.dismissed === '1') {
+		div.style.display = 'none';
+		return;
+	}
+	div.textContent = '';
+	const text = document.createElement('span');
+	text.textContent = messages.join(' · ');
+	const close = document.createElement('button');
+	close.type = 'button';
+	close.className = 'chart-notice-close';
+	close.textContent = 'x';
+	close.title = 'Dismiss for this session';
+	close.addEventListener('click', () => {
+		div.dataset.dismissed = '1';
+		div.style.display = 'none';
+	});
+	div.append(text, close);
+	div.style.display = 'flex';
 }
 
 function handle_resize() {
@@ -401,13 +510,10 @@ function draw_polar_chart(selected_tests, attenuation_filter = null) {
 
 	const traces = [];
 	const palette = chart_palette();
-	const colors = ['#0080ff', '#ff3b30', '#00c896', '#ff9500', '#5856d6', '#ff2d55', '#ffcc00', '#34c759'];
-	let color_index = 0;
+	const rotation_tests = selected_tests.filter(t => t.has_rotation);
+	const polar_identity = assign_series_identity(rotation_tests).identity;
 
-	selected_tests.forEach((test, test_idx) => {
-		if (!test.has_rotation) {
-			return;
-		}
+	rotation_tests.forEach((test) => {
 
 		let data_to_plot = test.data;
 
@@ -456,8 +562,8 @@ function draw_polar_chart(selected_tests, attenuation_filter = null) {
 			trace_name = `${trace_name} ${rotation_part}`;
 		}
 
-		const color = colors[color_index % colors.length];
-		color_index++;
+		const identity = polar_identity.get(series_identity_key(test));
+		const color = identity ? identity.color : get_css_var('--chart-cat-overflow', '#8a8a8a');
 
 		const is_rx = direction.toLowerCase().includes('rx');
 		const line_style = is_rx ? 'dash' : 'solid';
@@ -820,38 +926,8 @@ function drawChart(selected_tests) {
 		}
 	});
 
-	// Original qualifi categorical palette: 36 distinct entries for
-	// many-device comparisons; visually-similar shades are spaced so adjacent
-	// traces never share a hue.
-	const allColors = [
-		'#00a0c8', '#f72585', '#4361ee', '#ffbe0b', '#fb5607', '#3a0ca3',
-		'#3da9db', '#e01e70', '#3651de', '#f0b000', '#ec4800', '#2b0c94',
-		'#2e8cc5', '#c9185b', '#2941ce', '#e0a200', '#dd3a00', '#1c0c85',
-		'#1f6fb0', '#b21246', '#1c31be', '#d09400', '#ce2c00', '#0d0c76',
-		'#06ffa5', '#8338ec', '#ff6b35', '#f77f00', '#fcbf49', '#eae2b7',
-		'#003049', '#d62828', '#f77f00', '#fcbf49', '#eae2b7', '#ffffff'
-	];
-
-	// Create a map to assign unique colors to each device + software version + test configuration combination
-	const configColorMap = new Map();
-	let colorIndex = 0;
-
-	// First pass: identify unique device + test configuration + software version + country combinations
-	const uniqueConfigs = new Set();
-	tests_to_render.forEach(test => {
-		const deviceName = test.device_info?.['Model Number'] || test.device_info?.Name || test.file_name;
-		const softwareVersion = test.device_info?.['Software Version'] || '';
-		const country = get_country_code(test.device_info?.Country);
-		const test_config = formatTestName(test);
-		const configKey = `${deviceName}|${softwareVersion}|${country}|${test_config}`;
-		uniqueConfigs.add(configKey);
-	});
-
-	// Assign colors to unique configurations
-	Array.from(uniqueConfigs).forEach(configKey => {
-		configColorMap.set(configKey, allColors[colorIndex % allColors.length]);
-		colorIndex++;
-	});
+	const series_identity = assign_series_identity(tests_to_render);
+	const uniqueConfigs = new Set(tests_to_render.map(test => series_identity_key(test)));
 
 	// Create point style assignment for DUT models with multiple tests
 	const pointStyles = ['circle', 'triangle', 'rect', 'star', 'cross', 'crossRot', 'dash', 'line', 'rectRounded', 'rectRot'];
@@ -923,7 +999,8 @@ function drawChart(selected_tests) {
 		const modelNumber = test.device_info?.['Model Number'] || '';
 		const test_config = formatTestName(test);
 		const configKey = `${deviceName}|${softwareVersion}|${country}|${test_config}`;
-		let baseColor = configColorMap.get(configKey);
+		const base_identity = series_identity.identity.get(configKey);
+		let baseColor = base_identity ? base_identity.color : get_css_var('--chart-cat-overflow', '#8a8a8a');
 
 		const modelKey = `${deviceName}|${modelNumber}`;
 		const testKey = `${modelKey}|${softwareVersion}|${country}|${test_config}|${test.direction}`;
@@ -949,17 +1026,6 @@ function drawChart(selected_tests) {
 
 			const angle_idx = angle_map.get(test.display_angle);
 			borderDash = ANGLE_DASH_PATTERNS[angle_idx % ANGLE_DASH_PATTERNS.length];
-
-			const color_variation = angle_idx * 15;
-			const r = parseInt(baseColor.substring(1, 3), 16);
-			const g = parseInt(baseColor.substring(3, 5), 16);
-			const b = parseInt(baseColor.substring(5, 7), 16);
-
-			const new_r = Math.min(255, Math.max(0, r + color_variation));
-			const new_g = Math.min(255, Math.max(0, g + color_variation));
-			const new_b = Math.min(255, Math.max(0, b + color_variation));
-
-			baseColor = `#${new_r.toString(16).padStart(2, '0')}${new_g.toString(16).padStart(2, '0')}${new_b.toString(16).padStart(2, '0')}`;
 		} else if (test.direction.includes('RX')) {
 			borderDash = SERIES_DASH.rx;
 		}
@@ -972,14 +1038,15 @@ function drawChart(selected_tests) {
 				pointData: point
 			})),
 			borderColor: baseColor,
-			backgroundColor: baseColor + '20',
-			borderWidth: 2.5,
-			pointRadius: 4,
+			backgroundColor: series_alpha(baseColor, 0.13),
+			borderWidth: 2,
+			pointRadius: 3,
 			pointHoverRadius: 6,
 			pointStyle: pointStyle,
 			tension: 0.2,
 			borderDash: borderDash,
 			deviceName: deviceName,
+			device_key: base_identity ? base_identity.device_key : deviceName,
 			test_config: test_config,
 			fullTest: test,
 			display_angle: test.display_angle,
@@ -987,6 +1054,15 @@ function drawChart(selected_tests) {
 			country: country
 		};
 	});
+
+	const notice_messages = [];
+	if (datasets.length > 24) {
+		notice_messages.push(`${datasets.length} series plotted; consider narrowing the selection`);
+	}
+	if (series_identity.overflow.size > 0) {
+		notice_messages.push(`out of palette slots, shown in gray: ${Array.from(series_identity.overflow).join(', ')}`);
+	}
+	chart_notice_render(notice_messages);
 
 	// Get responsive configuration
 	const responsive_config = get_responsive_chart_config();
@@ -1015,7 +1091,7 @@ function drawChart(selected_tests) {
 				},
 				subtitle: {
 					display: !is_small_screen,
-					text: `Comparing ${uniqueConfigs.size} test configuration(s) across ${Array.from(new Set(tests_to_render.map(t => t.device_info?.Name || t.file_name))).length} device(s) | Solid: TX, Dotted: RX | Different point styles for multiple tests per DUT model`,
+					text: `${series_identity.device_count} device(s) · ${uniqueConfigs.size} config(s) · TX solid / RX dashed`,
 					color: palette_opt.text_tertiary,
 					font: {
 						size: is_small_screen ? 10 : 14,
@@ -1026,12 +1102,19 @@ function drawChart(selected_tests) {
 					...responsive_config.plugins.legend,
 					align: 'start',
 					onClick: function(e, legendItem, legend) {
-						if (legendItem.index === -1) {
+						const chart = legend.chart;
+						if (legendItem.datasetIndex === -1) {
+							if (!legendItem.device_key) return;
+							const metas = [];
+							chart.data.datasets.forEach((ds, i) => {
+								if (ds.device_key === legendItem.device_key) metas.push(chart.getDatasetMeta(i));
+							});
+							const any_visible = metas.some(m => !m.hidden);
+							metas.forEach(m => { m.hidden = any_visible; });
+							chart.update();
 							return;
 						}
-						const index = legendItem.datasetIndex;
-						const chart = legend.chart;
-						const meta = chart.getDatasetMeta(index);
+						const meta = chart.getDatasetMeta(legendItem.datasetIndex);
 						meta.hidden = !meta.hidden;
 						chart.update();
 					},
@@ -1058,82 +1141,68 @@ function drawChart(selected_tests) {
 						},
 						generateLabels: function(chart) {
 							const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
-
 							const grouped = new Map();
 
-							original.forEach((item, idx) => {
+							original.forEach(item => {
 								const dataset = chart.data.datasets[item.datasetIndex];
-								if (!dataset) {
-									return;
+								if (!dataset) return;
+								const dkey = dataset.device_key || dataset.deviceName;
+								if (!grouped.has(dkey)) {
+									grouped.set(dkey, {
+										device: dataset.deviceName,
+										country: dataset.country,
+										color: dataset.borderColor,
+										versions: new Set(),
+										items: []
+									});
 								}
-
+								const group = grouped.get(dkey);
+								group.versions.add(dataset.software_version);
+								const version_part = dataset.software_version ? `v${dataset.software_version} ` : '';
+								let text = `${dataset.test_config} ${dataset.fullTest.direction}`;
 								const has_angle = dataset.display_angle !== undefined && dataset.display_angle !== null;
-
-								if (has_angle) {
-							const group_key = `${dataset.deviceName}|${dataset.software_version}|${dataset.country}|${dataset.test_config}|${dataset.fullTest.direction}`;
-
-									if (!grouped.has(group_key)) {
-									let header_text = `${dataset.deviceName} ${dataset.software_version ? `v${dataset.software_version}` : ''}${dataset.country ? ` - ${dataset.country}` : ''} - ${dataset.test_config} ${dataset.fullTest.direction}`;
-
-										const rotation_match = header_text.match(/\(Rotation: [^)]+\)/);
-										if (rotation_match) {
-											const rotation_part = rotation_match[0];
-											header_text = header_text.replace(rotation_part, '').replace(/\s+/g, ' ').trim();
-											header_text = `${header_text} ${rotation_part}`;
-										}
-
-										grouped.set(group_key, {
-											header: header_text,
-											items: []
-										});
-									}
-
-									grouped.get(group_key).items.push({
-										...item,
-										text: `  Rotation: ${dataset.display_angle}°`,
-										angle: dataset.display_angle
-									});
-								} else {
-									let text = item.text;
-
-									const rotation_match = text.match(/\(Rotation: [^)]+\)/);
-									if (rotation_match) {
-										const rotation_part = rotation_match[0];
-										text = text.replace(rotation_part, '').replace(/\s+/g, ' ').trim();
-										text = `${text} ${rotation_part}`;
-									}
-
-									const maxLength = is_small_screen ? 40 : 90;
-									if (text.length > maxLength) {
-										text = text.substring(0, maxLength - 3) + '...';
-									}
-									grouped.set(`ungrouped_${idx}`, {
-										header: null,
-										items: [{...item, text}]
-									});
+								if (has_angle) text += ` @ ${dataset.display_angle}°`;
+								const rotation_match = text.match(/\(Rotation: [^)]+\)/);
+								if (rotation_match) {
+									text = text.replace(rotation_match[0], '').replace(/\s+/g, ' ').trim();
 								}
+								const maxLength = is_small_screen ? 34 : 64;
+								if (text.length > maxLength) text = text.substring(0, maxLength - 3) + '...';
+								group.items.push({
+									...item,
+									text,
+									version_part,
+									angle: has_angle ? dataset.display_angle : null
+								});
 							});
 
 							const result = [];
-							grouped.forEach((group, key) => {
-								if (group.header) {
-									result.push({
-										text: group.header,
-										fillStyle: 'transparent',
-										strokeStyle: 'transparent',
-										lineWidth: 0,
-										hidden: false,
-										index: -1,
-										datasetIndex: -1,
-										fontColor: palette_opt.text_primary,
-										fontStyle: 'bold'
-									});
-
-									group.items.sort((a, b) => a.angle - b.angle);
-								}
-
+							grouped.forEach((group, dkey) => {
+								// The device header owns metadata shared by every
+								// series of the device; version moves down to the
+								// rows only when several versions are on screen.
+								const single_version = group.versions.size === 1;
+								const version = single_version ? Array.from(group.versions)[0] : '';
+								const header_text = `${group.device}${version ? ` v${version}` : ''}${group.country ? ` - ${group.country}` : ''}`;
+								result.push({
+									text: header_text,
+									fillStyle: group.color,
+									strokeStyle: 'transparent',
+									pointStyle: 'rectRounded',
+									lineWidth: 0,
+									hidden: group.items.every(i => i.hidden),
+									index: -1,
+									datasetIndex: -1,
+									device_key: dkey,
+									fontColor: palette_opt.text_primary,
+									fontStyle: 'bold'
+								});
+								group.items.sort((a, b) =>
+									(a.angle ?? -1) - (b.angle ?? -1) || a.text.localeCompare(b.text)
+								);
 								group.items.forEach(item => {
-									result.push(item);
+									const prefix = single_version ? '' : item.version_part;
+									result.push({ ...item, text: `  ${prefix}${item.text}` });
 								});
 							});
 

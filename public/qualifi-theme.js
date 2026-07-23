@@ -70,6 +70,14 @@ function series_alpha(hex, alpha) {
 	return `${hex}${alpha_hex}`;
 }
 
+function color_blend(hex_a, hex_b, t) {
+	const parse = (h) => [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16));
+	const a = parse(hex_a);
+	const b = parse(hex_b);
+	const mixed = a.map((v, i) => Math.round(v + (b[i] - v) * Math.min(1, Math.max(0, t))));
+	return `#${mixed.map(v => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
 const SERIES_DASH = { tx: [], rx: [5, 5] };
 
 const ANGLE_DASH_PATTERNS = [

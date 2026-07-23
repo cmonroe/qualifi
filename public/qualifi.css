@@ -2434,6 +2434,35 @@ footer .version {
 	border: 2px solid var(--text-secondary);
 }
 
+.chart-notice {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-sm);
+	margin-bottom: var(--space-xs);
+	padding: 6px 12px;
+	border: 1px solid var(--accent-warning-mid);
+	border-radius: 6px;
+	background-color: var(--accent-warning-dim);
+	color: var(--text-secondary);
+	font-family: var(--mono-font);
+	font-size: 0.75rem;
+}
+
+.chart-notice-close {
+	border: none;
+	background: none;
+	color: var(--text-tertiary);
+	font-family: var(--mono-font);
+	font-size: 0.875rem;
+	cursor: pointer;
+	padding: 0 4px;
+}
+
+.chart-notice-close:hover {
+	color: var(--text-primary);
+}
+
 .cross-report-status-row {
 	display: flex;
 	align-items: center;

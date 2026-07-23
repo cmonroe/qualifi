@@ -607,6 +607,8 @@ function update_test_options() {
 		filter_notice.style.display = 'none';
 	}
 
+	device_slots_prune();
+
 	if (loaded_files.size === 0) {
 		document.querySelector('.test-selector').style.display = 'none';
 		return;
