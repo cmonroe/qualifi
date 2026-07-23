@@ -2575,6 +2575,41 @@ footer .version {
 	color: var(--bg-primary);
 }
 
+.chart-data-table {
+	overflow-x: auto;
+	margin-bottom: var(--space-sm);
+	max-height: 420px;
+	overflow-y: auto;
+	border: 1px solid var(--border-subtle);
+	border-radius: 8px;
+}
+
+.chart-data-table table {
+	width: 100%;
+	border-collapse: collapse;
+	font-family: var(--mono-font);
+	font-size: 0.75rem;
+}
+
+.chart-data-table th {
+	position: sticky;
+	top: 0;
+	background-color: var(--bg-secondary);
+	text-align: left;
+	padding: 6px 10px;
+	color: var(--text-tertiary);
+	border-bottom: 1px solid var(--border-default);
+	white-space: nowrap;
+}
+
+.chart-data-table td {
+	padding: 4px 10px;
+	color: var(--text-secondary);
+	border-bottom: 1px solid var(--border-subtle);
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
 .cross-report-status-row {
 	display: flex;
 	align-items: center;

@@ -58,6 +58,22 @@ function get_responsive_chart_config() {
 					padding: is_small_screen ? 8 : 16,
 					usePointStyle: true
 				}
+			},
+			zoom: {
+				zoom: {
+					// Wheel gated on Ctrl so page scroll over the chart is not
+					// hijacked; plain drag pans, Shift+drag box-zooms.
+					wheel: { enabled: true, modifierKey: 'ctrl' },
+					pinch: { enabled: true },
+					drag: { enabled: true, modifierKey: 'shift' },
+					mode: 'xy',
+					onZoomComplete: chart_zoom_mark
+				},
+				pan: {
+					enabled: true,
+					mode: 'xy',
+					onPanComplete: chart_zoom_mark
+				}
 			}
 		},
 		scales: {
@@ -219,6 +235,183 @@ function assign_series_identity(tests_to_render) {
 		identity.set(i.key, { color, device_key: i.device_key });
 	}
 	return { identity, overflow: overflow_devices, device_count: device_keys.size };
+}
+
+// Measured PHY vs the configured baseline. Shared by the tooltip text and
+// the open-marker styling so both always agree on what "degraded" means.
+function point_degradations(point, fullTest) {
+	const degradations = [];
+	const direction = point.direction || fullTest.direction;
+	const param_type = direction && direction.includes('TX') ? 'TX'
+		: direction && direction.includes('RX') ? 'RX' : 'PHY';
+	if (fullTest.nss && point.nss && point.nss !== fullTest.nss) {
+		degradations.push(`${param_type} NSS: ${fullTest.nss}→${point.nss}`);
+	}
+	if (fullTest.bandwidth && point.bandwidth
+		&& parseFloat(point.bandwidth) !== parseFloat(fullTest.bandwidth)) {
+		degradations.push(`${param_type} BW: ${fullTest.bandwidth}→${point.bandwidth}MHz`);
+	}
+	const baseline_point = fullTest.data && fullTest.data[0];
+	if (baseline_point && baseline_point.mode && point.mode && point.mode !== baseline_point.mode) {
+		degradations.push(`${param_type} Mode: ${baseline_point.mode}→${point.mode}`);
+	}
+	return degradations;
+}
+
+function point_is_degraded(ctx) {
+	if (!ctx.raw || !ctx.raw.pointData || ctx.dataIndex === 0) return false;
+	const fullTest = ctx.dataset.fullTest;
+	return fullTest ? point_degradations(ctx.raw.pointData, fullTest).length > 0 : false;
+}
+
+let legend_pin_key = null;
+
+function legend_highlight_apply(chart, legendItem) {
+	chart.data.datasets.forEach((ds, i) => {
+		const keep = legendItem.datasetIndex === -1
+			? ds.device_key === legendItem.device_key
+			: i === legendItem.datasetIndex;
+		ds.borderColor = keep ? ds._baseColor : series_alpha(ds._baseColor, 0.15);
+	});
+	chart.update('none');
+}
+
+function legend_highlight_clear(chart) {
+	chart.data.datasets.forEach(ds => { ds.borderColor = ds._baseColor; });
+	chart.update('none');
+}
+
+let chart_zoom_active = false;
+
+function chart_zoom_mark() {
+	chart_zoom_active = true;
+	const btn = document.getElementById('resetZoomButton');
+	if (btn) btn.style.display = 'inline-block';
+}
+
+function chart_reset_zoom() {
+	chart_zoom_active = false;
+	const btn = document.getElementById('resetZoomButton');
+	if (btn) btn.style.display = 'none';
+	if (chart_instance && typeof chart_instance.resetZoom === 'function') {
+		chart_instance.resetZoom();
+	}
+}
+
+// Index-mode tooltips list every series at the hovered X; past ~10 that stops
+// being readable. Keep the top values (itemSort orders them descending) and
+// point at the table view for the rest. The cache avoids recomputing the
+// cutoff for every item of one tooltip.
+const CHART_TOOLTIP_CAP = 10;
+const chart_tooltip_rank_cache = { x: null, cutoff: -Infinity, total: 0 };
+
+function chart_tooltip_rank_filter(item) {
+	if (chart_tooltip_rank_cache.x !== item.parsed.x) {
+		const ys = [];
+		item.chart.data.datasets.forEach((ds, di) => {
+			if (item.chart.getDatasetMeta(di).hidden) return;
+			for (const p of ds.data) {
+				if (p.x === item.parsed.x) {
+					ys.push(p.y);
+					break;
+				}
+			}
+		});
+		ys.sort((a, b) => b - a);
+		chart_tooltip_rank_cache.x = item.parsed.x;
+		chart_tooltip_rank_cache.total = ys.length;
+		chart_tooltip_rank_cache.cutoff =
+			ys.length > CHART_TOOLTIP_CAP ? ys[CHART_TOOLTIP_CAP - 1] : -Infinity;
+	}
+	return item.parsed.y >= chart_tooltip_rank_cache.cutoff;
+}
+
+function chart_tooltip_footer(items) {
+	const hidden = chart_tooltip_rank_cache.total - items.length;
+	return hidden > 0 ? `+ ${hidden} more series (see table view)` : '';
+}
+
+const qualifi_crosshair_plugin = {
+	id: 'qualifi_crosshair',
+	afterDraw(chart) {
+		if (chart.config.type !== 'line') return;
+		const active = chart.tooltip ? chart.tooltip.getActiveElements() : [];
+		if (!active.length) return;
+		const x = active[0].element.x;
+		const ctx = chart.ctx;
+		ctx.save();
+		ctx.strokeStyle = chart_palette().grid;
+		ctx.lineWidth = 1;
+		ctx.beginPath();
+		ctx.moveTo(x, chart.chartArea.top);
+		ctx.lineTo(x, chart.chartArea.bottom);
+		ctx.stroke();
+		ctx.restore();
+	}
+};
+
+let chart_table_visible = false;
+
+function chart_table_toggle() {
+	chart_table_visible = !chart_table_visible;
+	const container = document.getElementById('chartDataTable');
+	if (container) container.style.display = chart_table_visible ? 'block' : 'none';
+	const btn = document.getElementById('tableViewToggle');
+	if (btn) btn.textContent = chart_table_visible ? 'Hide Table' : 'Table View';
+	if (chart_table_visible) chart_table_render();
+}
+
+// Table twin of the RvR chart: every plotted value reachable without hover.
+function chart_table_render() {
+	const container = document.getElementById('chartDataTable');
+	if (!container) return;
+	container.textContent = '';
+	if (!chart_instance || chart_instance.data.datasets.length === 0) return;
+	const datasets = chart_instance.data.datasets;
+	const x_set = new Set();
+	const lookups = datasets.map(ds => {
+		const map = new Map();
+		ds.data.forEach(p => {
+			x_set.add(p.x);
+			map.set(p.x, p.y);
+		});
+		return map;
+	});
+	const xs = Array.from(x_set).sort((a, b) => a - b);
+	const first_test = datasets[0].fullTest;
+	const x_label = first_test && first_test.test_type === 'rotation' ? 'Angle (deg)' : 'Atten (dB)';
+	const table = document.createElement('table');
+	const thead = document.createElement('thead');
+	const head_row = document.createElement('tr');
+	const x_th = document.createElement('th');
+	x_th.textContent = x_label;
+	head_row.appendChild(x_th);
+	datasets.forEach(ds => {
+		const th = document.createElement('th');
+		const dot = document.createElement('span');
+		dot.className = 'rf-table-dot';
+		dot.style.background = ds._baseColor;
+		th.appendChild(dot);
+		th.appendChild(document.createTextNode(ds.label));
+		head_row.appendChild(th);
+	});
+	thead.appendChild(head_row);
+	const tbody = document.createElement('tbody');
+	for (const x of xs) {
+		const tr = document.createElement('tr');
+		const x_td = document.createElement('td');
+		x_td.textContent = String(x);
+		tr.appendChild(x_td);
+		lookups.forEach(map => {
+			const td = document.createElement('td');
+			const y = map.get(x);
+			td.textContent = y === undefined ? '—' : y.toFixed(1);
+			tr.appendChild(td);
+		});
+		tbody.appendChild(tr);
+	}
+	table.append(thead, tbody);
+	container.appendChild(table);
 }
 
 function chart_notice_render(messages) {
@@ -894,9 +1087,19 @@ function updateChart() {
 function drawChart(selected_tests) {
 	const ctx = document.getElementById('rvrChart').getContext('2d');
 
+	let zoom_restore = null;
 	if (chart_instance) {
+		// The chart is destroyed and rebuilt on every selection change; keep
+		// the analyst's zoom viewport across that rebuild.
+		if (chart_zoom_active && chart_instance.scales && chart_instance.scales.x) {
+			zoom_restore = {
+				x: { min: chart_instance.scales.x.min, max: chart_instance.scales.x.max },
+				y: { min: chart_instance.scales.y.min, max: chart_instance.scales.y.max }
+			};
+		}
 		chart_instance.destroy();
 	}
+	legend_pin_key = null;
 
 	const test_types = new Set(selected_tests.map(t => t.test_type || 'rvr'));
 	const is_pure_rotation = test_types.has('rotation') && test_types.size === 1;
@@ -1058,9 +1261,15 @@ function drawChart(selected_tests) {
 				pointData: point
 			})),
 			borderColor: baseColor,
+			_baseColor: baseColor,
 			backgroundColor: series_alpha(baseColor, 0.13),
 			borderWidth: 2,
-			pointRadius: 3,
+			// A point whose measured PHY fell below the configured baseline
+			// renders as an open marker, visible without hovering.
+			pointBackgroundColor: (c) => point_is_degraded(c) ? 'transparent' : c.dataset.borderColor,
+			pointBorderColor: (c) => c.dataset.borderColor,
+			pointBorderWidth: (c) => point_is_degraded(c) ? 2 : 1,
+			pointRadius: (c) => point_is_degraded(c) ? 4 : 3,
 			pointHoverRadius: 6,
 			pointStyle: pointStyle,
 			tension: 0.2,
@@ -1092,6 +1301,7 @@ function drawChart(selected_tests) {
 
 	chart_instance = new Chart(ctx, {
 		type: chart_type,
+		plugins: [qualifi_crosshair_plugin],
 		data: {
 			datasets: datasets
 		},
@@ -1125,6 +1335,18 @@ function drawChart(selected_tests) {
 						const chart = legend.chart;
 						if (legendItem.datasetIndex === -1) {
 							if (!legendItem.device_key) return;
+							// Shift+click pins the highlight on one device
+							// instead of toggling its visibility.
+							if (e.native && e.native.shiftKey) {
+								legend_pin_key = legend_pin_key === legendItem.device_key
+									? null : legendItem.device_key;
+								if (legend_pin_key) {
+									legend_highlight_apply(chart, { datasetIndex: -1, device_key: legend_pin_key });
+								} else {
+									legend_highlight_clear(chart);
+								}
+								return;
+							}
 							const metas = [];
 							chart.data.datasets.forEach((ds, i) => {
 								if (ds.device_key === legendItem.device_key) metas.push(chart.getDatasetMeta(i));
@@ -1137,6 +1359,16 @@ function drawChart(selected_tests) {
 						const meta = chart.getDatasetMeta(legendItem.datasetIndex);
 						meta.hidden = !meta.hidden;
 						chart.update();
+					},
+					onHover: function(e, legendItem, legend) {
+						legend_highlight_apply(legend.chart, legendItem);
+					},
+					onLeave: function(e, legendItem, legend) {
+						if (legend_pin_key) {
+							legend_highlight_apply(legend.chart, { datasetIndex: -1, device_key: legend_pin_key });
+						} else {
+							legend_highlight_clear(legend.chart);
+						}
 					},
 					title: {
 						display: false,
@@ -1232,7 +1464,12 @@ function drawChart(selected_tests) {
 				},
 				tooltip: {
 					...responsive_config.plugins.tooltip,
+					itemSort: function(a, b) {
+						return b.parsed.y - a.parsed.y;
+					},
+					filter: chart_tooltip_rank_filter,
 					callbacks: {
+						footer: chart_tooltip_footer,
 						title: function(tooltipItems) {
 							if (tooltipItems.length > 0) {
 								if (is_pure_rotation) {
@@ -1302,30 +1539,8 @@ function drawChart(selected_tests) {
 									lines.push(` Angle: ${point.angle}°`);
 								}
 
-								// Show if parameters have degraded from test configuration
 								if (dataIndex > 0 && fullTest.data && fullTest.data[0]) {
-									const degradations = [];
-									const direction = point.direction || fullTest.direction;
-									const paramType = direction && direction.includes('TX') ? 'TX' :
-											 direction && direction.includes('RX') ? 'RX' : 'PHY';
-
-									// Check for NSS degradation against configured values
-									if (fullTest.nss && point.nss && point.nss !== fullTest.nss) {
-										degradations.push(`${paramType} NSS: ${fullTest.nss}→${point.nss}`);
-									}
-
-									// Check for bandwidth degradation against configured values
-									if (fullTest.bandwidth && point.bandwidth &&
-										parseFloat(point.bandwidth) !== parseFloat(fullTest.bandwidth)) {
-										degradations.push(`${paramType} BW: ${fullTest.bandwidth}→${point.bandwidth}MHz`);
-									}
-
-									// Check for mode change (still compare against first data point since mode comes from measured data)
-									const baselinePoint = fullTest.data[0];
-									if (baselinePoint.mode && point.mode && point.mode !== baselinePoint.mode) {
-										degradations.push(`${paramType} Mode: ${baselinePoint.mode}→${point.mode}`);
-									}
-
+									const degradations = point_degradations(point, fullTest);
 									if (degradations.length > 0) {
 										lines.push(`[!] Degraded: ${degradations.join(', ')}`);
 									}
@@ -1398,4 +1613,10 @@ function drawChart(selected_tests) {
 			}
 		}
 	});
+
+	if (zoom_restore && typeof chart_instance.zoomScale === 'function') {
+		chart_instance.zoomScale('x', zoom_restore.x, 'none');
+		chart_instance.zoomScale('y', zoom_restore.y, 'none');
+	}
+	if (chart_table_visible) chart_table_render();
 }

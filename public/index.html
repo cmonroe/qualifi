@@ -26,6 +26,12 @@
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.js"
 		integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi"
 		crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"
+		integrity="sha384-Cs3dgUx6+jDxxuqHvVH8Onpyj2LF1gKZurLDlhqzuJmUqVYMJ0THTWpxK5Z086Zm"
+		crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+	<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"
+		integrity="sha384-dwwI6ICEN/0ZQlS5owhUa/6ZzvwUPmjH45bFVCAcjgjTulbHJvlE+TGU3g1k0N3R"
+		crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 	<script src="https://cdn.plot.ly/plotly-3.5.0.min.js"
 		integrity="sha384-DPvk2KODrsA0CfBr4HTwAwhdDROPqqK2PvSSswJMQMpnUkwSTg4gLBxXc3wv2e5L"
 		crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -211,6 +217,8 @@
 						<button class="chart-button" onclick="export_chart()">Export Chart</button>
 						<button class="chart-button" id="exportGifButton" onclick="export_polar_gif()" style="display: none;">Export GIF</button>
 						<button class="chart-button" onclick="export_csv()">Export CSV Data</button>
+						<button class="chart-button" id="tableViewToggle" onclick="chart_table_toggle()">Table View</button>
+						<button class="chart-button" id="resetZoomButton" onclick="chart_reset_zoom()" style="display: none;" title="Zoom: Ctrl+wheel or Shift+drag; drag to pan">Reset Zoom</button>
 					</div>
 					<div class="chart-controls-right">
 						<button class="chart-button chart-button-clear" onclick="clear_chart_selection()">Clear Selection</button>
@@ -234,6 +242,8 @@
 				<div class="chart-wrapper" id="cartesianChartWrapper">
 					<canvas id="rvrChart"></canvas>
 				</div>
+
+				<div id="chartDataTable" class="chart-data-table" style="display: none;"></div>
 
 				<div class="chart-wrapper" id="polarChartWrapper" style="display: none;">
 					<div id="polarChart"></div>
